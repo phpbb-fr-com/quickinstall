@@ -4,9 +4,9 @@
 * phpbb [French]
 *
 * @package quickinstall
-* @version $Id:	papicx	1.1.8	12/01/2013 17h15 $
 * @copyright (c) 2007 phpBB Group
-* @translator (c) 2012 Papicx http://www.cxclub.org/ papicx@phpbb-fr.com
+* @translator Papicx http://www.cxclub.org/ papicx@phpbb-fr.com
+* @translator phpBB-fr.com <http://www.phpbb-fr.com>
 * @license http://opensource.org/licenses/gpl-2.0.php GNU General Public License v2
 *
 */
