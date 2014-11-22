@@ -45,7 +45,7 @@ if (empty($lang) || !is_array($lang))
 
 $lang = array_merge($lang, array(
 	'ABOUT_QUICKINSTALL'	=> 'À propos de QuickInstall',
-	'ABOUT_SECTIONS'		=> 'À propos des sections',
+	'ABOUT_SECTIONS'		=> 'À propos de…',
 	'ADMIN_EMAIL'			=> 'Adresse e-mail de l’administrateur',
 	'ADMIN_EMAIL_EXPLAIN'	=> 'Adresse e-mail de l’administrateur à utiliser sur vos forums.',
 	'ADMIN_NAME'			=> 'Nom d’utilisateur de l’administrateur',
@@ -85,7 +85,7 @@ $lang = array_merge($lang, array(
 	'CACHE_DIR_MISSING'				=> 'Le répertoire %s n’existe pas ou n’est pas autorisé en écriture.',
 	'CACHE_NOT_WRITABLE'			=> 'Le répertoire du cache n’est pas autorisé en écriture.',
 	'CANNOT_DELETE_LAST_PROFILE'	=> 'Vous ne pouvez pas supprimer le seul profil que vous avez.',
-	'CHANGELOG'						=> 'Modifications',
+	'CHANGELOG'						=> 'Modifications (en anglais)',
 	'CHECK_ALL'						=> 'Tout sélectionner',
 	'CHUNK_POST'					=> 'Blocs des messages',
 	'CHUNK_POST_EXPLAIN'			=> 'Nombre de messages qui seront envoyés à la base de données dans chaque requête.',
@@ -172,7 +172,7 @@ $lang = array_merge($lang, array(
 
 	'LANG_SELECT'				=> 'Sélection de la langue',
 	'LICENSE'					=> 'Licence ?',
-	'LICENSE_EXPLAIN'			=> 'Ce script est sous <a href="license.txt">Licence Publique Générale GNU version 2</a>. C’est principalement dû au fait qu’il utilise une grande partie du code de phpBB, qui est également sous cette licence obligeant que toute modification effectuée hérite également de la même licence. Mais aussi parce qu’il s’agit d’une superbe licence qui fait qu’un logiciel libre soit et continue de rester libre :).',
+	'LICENSE_EXPLAIN'			=> 'Ce script est publié sous la <a href="license.txt">licence publique générale GNU version 2</a>. C’est principalement dû au fait qu’il utilise une grande partie du code de phpBB, qui est également sous cette licence, obligeant que toute modification effectuée hérite également de la même licence. Mais aussi parce qu’il s’agit d’une superbe licence qui fait qu’un logiciel libre soit et continue de rester libre :).',
 	'LOG_INSTALL_INSTALLED_QI'	=> '<strong>Installé par QuickInstall %s</strong>',
 
 	'MAKE_WRITABLE'					=> 'Rendre les fichiers accessibles en écriture',
@@ -260,7 +260,7 @@ $lang = array_merge($lang, array(
 	'SETTINGS'					=> 'Paramètres',
 	'SETTINGS_FAILURE'			=> 'Des erreurs sont survenues, consultez la fenêtre ci-dessous.',
 	'SETTINGS_NOT_WRITABLE'		=> 'Le répertoire des paramètres n’existe pas, n’est pas un répertoire ou n’est pas accessible en écriture.',
-	'SETTINGS_SECTIONS'			=> 'Sections paramètres',
+	'SETTINGS_SECTIONS'			=> 'Paramètres…',
 	'SETTINGS_SUCCESS'			=> 'Vos paramètres ont été sauvegardés avec succès.',
 	'SERVER_COOKIE_SETTINGS'	=> 'Paramètres de serveur et cookie',
 	'SERVER_NAME'				=> 'Nom du serveur',
@@ -302,7 +302,7 @@ $lang = array_merge($lang, array(
 	'TEST_TOPIC_TITLE'		=> 'Sujet de test %d',
 	'THESE_CAN_CHANGE'		=> 'Ces paramètres peuvent être modifiés lors de la création d’un forum.',
 	'THIS_CAN_CHANGE'		=> 'Ceci peut être changé lors de la création d’un forum.',
-	'TIME_SETTINGS'			=> 'Paramètres horaire',
+	'TIME_SETTINGS'			=> 'Paramètres de temps',
 
 	'UNCHECK_ALL'			=> 'Tout déselectionner',
 
