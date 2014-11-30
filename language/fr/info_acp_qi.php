@@ -4,10 +4,10 @@
 * info_acp_qi [French]
 *
 * @package quickinstall
-* @copyright (c) 2008 phpBB Group
-* @translator Papicx http://www.cxclub.org/ papicx@phpbb-fr.com
-* @translator phpBB-fr.com <http://www.phpbb-fr.com>
+* @copyright (c) 2008 phpBB Limited
 * @license http://opensource.org/licenses/gpl-2.0.php GNU General Public License v2
+*
+* @translator phpBB-fr.com <http://www.phpbb-fr.com>
 *
 */
 
