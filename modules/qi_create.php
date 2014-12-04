@@ -72,7 +72,7 @@ class qi_create
 
 		if ($alt_env !== '' && (!file_exists("{$quickinstall_path}sources/phpBB3_alt/$alt_env") || is_file("{$quickinstall_path}sources/phpBB3_alt/$alt_env")))
 		{
-			trigger_error('NO_ALT_ENV');
+			create_board_warning($user->lang['MINOR_MISHAP'], $user->lang['NO_ALT_ENV_FOUND'], 'main');
 		}
 
 		if ($automod)
@@ -132,7 +132,7 @@ class qi_create
 			}
 			else
 			{
-				trigger_error(sprintf($user->lang['DIR_EXISTS'], $board_dir));
+				create_board_warning($user->lang['MINOR_MISHAP'], sprintf($user->lang['DIR_EXISTS'], $board_dir), 'main');
 			}
 		}
 
@@ -170,7 +170,8 @@ class qi_create
 
 		// Write to config.php ;)
 		$config_data = "<?php\n";
-		$config_data .= "// phpBB 3.0.x auto-generated configuration file\n// Do not change anything in this file!\n";
+		$config_version = (defined('PHPBB_31')) ? '3.1' : '3.0';
+		$config_data .= "// phpBB $config_version.x auto-generated configuration file\n// Do not change anything in this file!\n";
 
 		$config_data_array = array(
 			'$dbhost' => $dbhost,
@@ -256,7 +257,7 @@ class qi_create
 
 			if ($db_check)
 			{
-				trigger_error(sprintf($user->lang['DB_EXISTS'], $db_prefix . $dbname));
+				create_board_warning($user->lang['MINOR_MISHAP'], sprintf($user->lang['DB_EXISTS'], $db_prefix . $dbname), 'main');
 			}
 		}
 

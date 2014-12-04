@@ -15,13 +15,65 @@ if (!defined('IN_QUICKINSTALL'))
 	exit;
 }
 
-function create_board_warning($title, $text, $page)
+
+function gen_error_msg($msg_text, $msg_title = 'General error')
+{
+	global $quickinstall_path;
+
+	$l_return_index = '<a href="' . qi::url('main') . '">Go to QuickInstall main page</a> &bull; <a href="' . qi::url('settings') . '">Go to settings</a>';
+	$qi_version		= QI_VERSION;
+
+	phpbb_functions::send_status_line(503, 'Service Unavailable');
+
+echo<<<ERROR_PAGE
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" dir="ltr">
+	<head>
+		<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+		<title>$msg_title</title>
+		<link href="{$quickinstall_path}style/style.css" rel="stylesheet" type="text/css" media="screen" />
+	</head>
+	<body id="errorpage">
+		<div id="wrap">
+			<div id="page-header">
+				$l_return_index
+			</div>
+
+			<div id="page-body">
+				<div id="acp">
+					<div class="panel">
+						<span class="corners-top"><span></span></span>
+						<div id="content">
+							<h1 style="margin-bottom: 10px">$msg_title</h1>
+							<div>$msg_text</div>
+						</div>
+						<div style="padding-left: 10px;">
+							$l_return_index
+						</div>
+						<span class="corners-bottom"><span></span></span>
+					</div>
+				</div>
+			</div>
+
+			<div id="page-footer">
+				Powered by <a href="https://www.phpbb.com/customise/db/official_tool/phpbb3_quickinstall/">phpBB QuickInstall</a> $qi_version
+				for phpBB 3.0.x &copy; <a href="http://www.phpbb.com/">phpBB Group</a>
+			</div>
+		</div>
+	</body>
+</html>
+ERROR_PAGE;
+
+	exit;
+}
+
+function create_board_warning($msg_title, $msg_text, $page)
 {
 	global $settings, $phpEx;
 
 	$args =  'page='			. urlencode($page);
-	$args .= '&error_title='	. urlencode($title);
-	$args .= '&error_msg='		. urlencode($text);
+	$args .= '&error_title='	. urlencode($msg_title);
+	$args .= '&error_msg='		. urlencode($msg_text);
 	$args .= '&error='	. 1;
 
 	foreach ($_POST as $key => $value)
@@ -180,10 +232,11 @@ function get_alternative_env($selected_option = '')
 {
 	global $user, $quickinstall_path;
 
-	$selected = (empty($selected_option)) ? ' selected="selected"' : '';
-	$alt_env = "<option value=''$selected>{$user->lang['DEFAULT_ENV']}</option>";
-	$d = dir($quickinstall_path . 'sources/phpBB3_alt');
-	while (false !== ($file = $d->read()))
+	$none_selected	= (empty($selected_option)) ? ' selected="selected"' : '';
+	$alt_env		= '';
+	$dh				= dir($quickinstall_path . 'sources/phpBB3_alt');
+
+	while (false !== ($file = $dh->read()))
 	{
 		// Ignore everything that starts with a dot.
 		if ($file[0] === '.' || is_file($quickinstall_path . 'sources/phpBB3_alt/' . $file))
@@ -196,7 +249,12 @@ function get_alternative_env($selected_option = '')
 
 		$alt_env .= "<option{$selected}>$file</option>";
 	}
-	$d->close();
+	$dh->close();
+
+	if (!empty($alt_env))
+	{
+		$alt_env = "<option value=''$none_selected>{$user->lang['DEFAULT_ENV']}</option>" . $alt_env;
+	}
 
 	return($alt_env);
 }
@@ -206,15 +264,12 @@ function get_alternative_env($selected_option = '')
  */
 function get_installed_boards()
 {
-	global $settings, $template;
+	global $settings, $template, $phpEx;
 
+	// list of boards
 	$boards_dir = $settings->get_boards_dir();
 	$boards_arr = scandir($boards_dir);
 
-	$s_have_boards = false;
-
-	// list of boards
-	$boards_arr = scandir($settings->get_boards_dir());
 	foreach ($boards_arr as $board)
 	{
 		if ($board[0] === '.' || is_file($boards_dir . $board))
@@ -222,15 +277,30 @@ function get_installed_boards()
 			continue;
 		}
 
-		$s_have_boards = true;
+		$version = '';
+		// Try to find out phpBB version.
+		if (file_exists("{$boards_dir}$board/includes/constants.$phpEx"))
+		{
+			$rows = file("{$boards_dir}$board/includes/constants.$phpEx", FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);
+
+			foreach ($rows as $row)
+			{
+				if (($pos = strpos($row, "'PHPBB_VERSION', '")) !== false)
+				{
+					$pos = $pos + 18;
+					$version = substr($row, $pos, -3);
+					break;
+				}
+			}
+			unset($rows);
+		}
 
 		$template->assign_block_vars('board_row', array(
 			'BOARD_NAME'	=> htmlspecialchars($board),
 			'BOARD_URL'		=> $settings->get_boards_url() . urlencode($board),
+			'VERSION'		=> $version,
 		));
 	}
-
-	$template->assign_var('S_HAVE_BOARDS', $s_have_boards);
 }
 
 function db_connect($db_data = '')
