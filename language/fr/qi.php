@@ -167,6 +167,8 @@ $lang = array_merge($lang, array(
 	'INCLUDE_MODS'			=> 'Inclure des MODs',
 	'INCLUDE_MODS_EXPLAIN'	=> 'Sélectionnez dans cette liste les répertoires depuis le répertoire « sources/mods/ », ces fichiers seront copiés dans votre nouveau répertoire racine de votre forum, ce qui écrasera également les anciens fichiers (vous pouvez donc utiliser ici des forums pré-modifiés par exemple).<br />Si vous sélectionnez « Aucun », cette fonctionnalité ne sera pas utilisée (parce qu’il est pénible de désélectionner plusieurs éléments).',
 	'INSTALL_BOARD'			=> 'Installer un forum',
+	'INSTALL_STYLES'		=> 'Installer les styles',
+	'INSTALL_STYLES_EXPLAIN'	=> 'Si défini sur « Oui » les styles présents dans « [source]/styles » seront installés sauf si le style parent n’est pas disponible.',
 	'INSTALL_QI'			=> 'Installer QuickInstall',
 	'IS_NOT_VALID'			=> 'N’est pas correct.',
 
@@ -181,15 +183,17 @@ $lang = array_merge($lang, array(
 	'MAKE_WRITABLE_BOARD_EXPLAIN'	=> '(équivaut à accorder la permission « 0666 »)',
 	'MANAGE_BOARDS'					=> 'Gérer les forums',
 	'MAX'							=> 'Max.',
-	'MIGHT_TAKE_LONG'				=> '<strong>Informations : </strong>La création du forum peut prendre un certain temps, souvent une minute ou un peu plus, faites donc attention à ne <strong>pas</strong> envoyer le formulaire deux fois.',
+	'MIGHT_TAKE_LONG'				=> '<strong>Informations : </strong>La création du forum peut prendre un certain temps, souvent une minute ou voire plus, faites donc attention à ne <strong>pas</strong> envoyer le formulaire deux fois.',
 	'MIN'							=> 'Min.',
+	'MINOR_MISHAP'			=> 'Erreur',
 	'MISC_SETTINGS'			=> 'Paramètres divers',
 
 	'NEED_CONVERT'			=> 'Votre fichier de configuration doit être converti au nouveau format de gestion de profils. Assurez-vous que le dossier « settings » est présent et qu’il est accessible en écriture par PHP. Puis cliquez sur « Envoyer ».',
 	'NEED_EMAIL_DOMAIN'		=> 'Un domaine de l’adresse e-mail est nécessaire pour créer des utilisateurs de test',
 	'NEED_WRITABLE'			=> 'QuickInstall nécessite que les répertoires « cache » et « boards » soient accessibles en écriture de manière permanente.<br />le fichier « qi_config.php » a également besoin d’être accessible en écriture afin de sauvegarder la configuration de QuickInstall.',
 	'NO'					=> 'Non',
-	'NO_ALT_ENV'			=> 'L’environnement alternatif que vous avez spécifié n’existe pas.',
+	'NO_ALT_ENV'			=> 'Aucun environnement alternatif.',
+	'NO_ALT_ENV_FOUND'		=> 'L’environnement alternatif que vous avez spécifié n’existe pas.',
 	'NO_AUTOMOD'			=> 'AutoMOD est introuvable dans le répertoire des sources. Vous devez télécharger AutoMOD, copier tout le contenu du répertoire racine dans le répertoire sources/automod. Si vous utilisez AutoMOD 1.0.0 c’est le contenu du répertoire « upload ».',
 	'NO_AUTOMOD_TITLE'		=> 'AutoMOD n’a pas été détecté',
 	'NO_BOARDS'				=> 'Vous n’avez aucun forum.',
@@ -215,14 +219,17 @@ $lang = array_merge($lang, array(
 
 	'OFF'					=> 'Non',
 	'ON'					=> 'Oui',
+	'ONLY_30'				=> 'Disponible uniquement pour phpBB 3.0.x',
+	'ONLY_31'				=> 'Disponible uniquement pour phpBB 3.1.x',
 	'ONLY_LOCAL'			=> '<strong>Bienvenue sur QuickInstall (QI)</strong>, un outil permettant d’installer rapidement un forum phpBB de test.<br /><br />Certains paramètres par défaut ont été chargés ci-dessous. Les seules informations à renseigner sont « Utilisateur de la base de données » et « Mot de passe de la base de données » si vous voulez qu’elles soient stockées par QuickInstall. Mais il serait bien de vérifier également les autres paramètres.<br />Assurez-vous que les répertoires « boards » , « cache » et « settings » existent et sont accessibles en écriture par PHP.<br /><br />Une fois que vous avez vérifié les paramètres et les répertoires requis, il suffit de cliquer sur le bouton « Envoyer » et ce profil sera sauvegardé sous le nom « default ».<br />Si vous souhaitez définir un autre nom, vous pouvez en renseigner un dans le champ « Enregistrer en tant que nouveau profil ».<div class="errorbox"><strong>Attention</strong> : QuickInstall  est uniquement destiné à être utilisé localement et ne doit pas être utilisé sur un serveur web accessible via Internet (serveur web public). <strong>Si vous décidez de l’utiliser sur un serveur web public, c’est à vos risques et périls.</strong> Aucun support ne vous sera fourni si vous utilisez QuickInstall sur un serveur web public.</div>',
+	'ONLY_SUBSILVER'		=> 'subsilver2 seulement',
 	'OPTIONS'				=> 'Options',
 	'OPTIONS_ADVANCED'		=> 'Options avancées',
 	'OTHER_CONFIG'			=> 'Autres paramètres de configuration du forum',
 	'OTHER_CONFIG_EXPLAIN'	=> 'Ceux-ci seront mis à jour dans la table « config » ou ajoutés à la table « config » s’ils n’existent pas encore. Donc, assurez-vous de les orthographier correctement. Ils peuvent également être modifiés lors de la création du forum.<br />Mettre un paramètre de configuration par ligne et un point-virgule « ; » comme séparateur de liste : « config-name; config-setting; dynamic ».<br />Si le paramètre n’est pas dynamique alors « dynamic » n’est pas nécessaire. Les lignes commençant par un <strong>#</strong> sont considérées comme des commentaires et ne sont pas ajoutées à la base de données.<br />Exemple :<br />load_tplcompile;1;1<br />session_length;999999<br /># ceci est un commentaire',
 
-	'PHPINFO'				=> 'Information PHP',
-	'PHPINFO_EXPLAIN'		=> 'Cette page affiche des informations sur la version de PHP installée sur ce serveur. Elle comprend des détails sur les modules chargés, les variables disponibles et les paramètres par défaut. Ces informations peuvent être utiles pour diagnostiquer les problèmes. Soyez conscient que certains hébergeurs limitent les informations affichées ici pour des raisons de sécurité. Nous vous conseillons de ne pas communiquer tous les détails de cette page, sauf lorsque cela est demandé demandé par les membres des équipes officielles des forums de support.',
+	'PHPINFO'				=> 'Informations PHP',
+	'PHPINFO_EXPLAIN'		=> '<strong>Informations PHP</strong><br /><br />Cette page affiche des informations sur la version de PHP installée sur ce serveur. Elle comprend des détails sur les modules chargés, les variables disponibles et les paramètres par défaut. Ces informations peuvent être utiles pour diagnostiquer les problèmes. Soyez conscient que certains hébergeurs limitent les informations affichées ici pour des raisons de sécurité. Nous vous conseillons de ne pas communiquer tous les détails de cette page, sauf lorsque cela est demandé demandé par les membres des équipes officielles des forums de support.',
 	'PLAIN_TEXT'			=> '<strong>Information</strong> : QuickInstall stocke les mots de passe et noms d’utilisateurs en texte clair.',
 	'POPULATE'				=> 'Remplir le forum',
 	'POPULATE_EXPLAIN'		=> 'Permet de créer automatiquement des utilisateurs, des catégories, des forums, des sujets et des messages selon les paramètres spécifiés ci-dessous. Plus ces valeurs sont élevées, plus le temps de création du forum sera important.<br />Tous ces paramètres peuvent être modifiés lorsque vous créez un forum.',
@@ -242,7 +249,7 @@ $lang = array_merge($lang, array(
 	'QI_MANAGE_ABOUT'		=> '&nbsp;',
 	'QI_MANAGE_PROFILE'		=> 'Gérer les profils',
 	'QI_TZ'					=> 'Fuseau horaire',
-	'QI_TZ_EXPLAIN' 		=> 'Ce fuseau horaire sera défini par défaut pour les forums créés. -1, 0, 1, etc.',
+	'QI_TZ_EXPLAIN' 		=> 'Ce fuseau horaire sera défini par défaut pour les forums créés.<br />Pour les forums 3.0 ce paramètre sera automatiquement converti en valeur numérique et DST (heure d’été)',
 	'QUICKINSTALL'			=> 'QuickInstall',
 
 	'REDIRECT'				=> 'Rediriger',
@@ -257,6 +264,8 @@ $lang = array_merge($lang, array(
 	'SAVE_RESTORE'				=> 'Sauvegarder/Restaurer',
 	'SELECT'					=> 'Sélectionner',
 	'SELECT_PROFILE'			=> 'Sélectionner un profil',
+	'SET_DEFAULT_STYLE'			=> 'Définir le style par défaut',
+	'SET_DEFAULT_STYLE_EXPLAIN'	=> 'Saisir le nom du style que vous voulez définir comme style par défaut. Le nom du style sera recherché dans le fichier « styles/[style name]/style.cfg ». Prosilver sera défini par défaut si vous ne renseignez aucun nom de style ou que le style ne peut pas être installé.',
 	'SETTINGS'					=> 'Paramètres',
 	'SETTINGS_FAILURE'			=> 'Des erreurs sont survenues, consultez la fenêtre ci-dessous.',
 	'SETTINGS_NOT_WRITABLE'		=> 'Le répertoire des paramètres n’existe pas, n’est pas un répertoire ou n’est pas accessible en écriture.',
@@ -288,8 +297,7 @@ $lang = array_merge($lang, array(
 	'SQLITE_PATH_MISSING'		=> 'Le chemin de la base de données du serveur entré est absent ou n’est pas accessible en écriture.',
 	'STAR_MANDATORY'			=> '* = obligatoire',
 	'SUBMIT'					=> 'Envoyer',
-	'SUBSILVER'					=> 'Installer subsilver2',
-	'SUBSILVER_EXPLAIN'			=> 'Sélectionnez ceci si vous souhaitez que le thème subsilver2 soit installé et qu’il soit le style par défaut.',
+	'SUBSILVER_DEFAULT'			=> 'Définir subsilver2 comme style par défaut',
 	'SUCCESS'					=> 'Succès',
 	'SURE_DELETE_PROFILE'		=> 'Êtes-vous sûr de vouloir supprimer ce profil ? Cela ne peut pas être annulé.',
 	'SURE_DELETE_BOARDS'		=> 'Êtes-vous sûr de vouloir supprimer ce(s) forum(s) ? Cela ne peut pas être annulé.',
@@ -322,4 +330,14 @@ $lang = array_merge($lang, array(
 	'WHO_WHEN_EXPLAIN'		=> 'QuickInstall a été créé à l’origine par Igor Wiedler, également connu sous le nom de « igorw », durant l’été 2007. Il a été en partie réécrit par lui-même en mars 2008.<br />Depuis mars 2010, ce projet est maintenu par Jari Kanerva, également connu sous le nom de « Tumba25 ».',
 	'WHY'					=> 'Pourquoi ?',
 	'WHY_EXPLAIN'			=> 'Tout comme avec phpBB2, si vous faites beaucoup de modding (installation de modifications), vous ne pouvez pas installer tous les MODs dans une seule installation de phpBB. Il est donc préférable de faire des installations séparées. Maintenant, le problème est qu’il est pénible de copier les fichiers et de passer par le processus d’installation à chaque fois. Pour accélérer ce processus, QuickInstall est né.',
+
+	// Config updated strings.
+	'UPDATED_EXPLAIN'	=> 'Votre profil a été mis à jour vers la version %s de QuickInstall. Ci-dessous vous trouverez la liste des modifications. Ces nouveaux paramètres ont été définis avec leur valeur par défaut, également indiquées ci-dessous.<br />Si vous souhaitez modifier ces nouveaux paramètres, accédez à la page de configuration en cliquant sur les liens présents en haut et bas de page. Si vous avez plus d’un profil, cliquez sur le bouton ci-dessous pour mettre à jour tous vos profils.', // %s will be replaced with QI version.
+	'PROFILE_UPDATED'	=> 'Profil « %s » mis à jour', // %s will be replaced by a profile name.
+	'PROFILES_UPDATED'	=> 'Les profils suivants ont été mis à jour',
+	'UPDATE_PROFILES'	=> 'Mettre à jour les profils',
+
+	'DST_REMOVED'		=>	'Le paramètre d’heure d’été (qi_dst) a été supprimé.',
+	'TIMEZONE_UPDATED'	=>	'Le paramètre de fuseau horaire (qi_tz) a été mis à jour en remplaçant la valeur numérique par une valeur texte. La valeur « UTC » a été définie comme valeur par défaut.',
+
 ));
