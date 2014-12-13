@@ -247,7 +247,7 @@ $lang = array_merge($lang, array(
 	'QI_MANAGE_ABOUT'		=> 'Install a new board here.<br /><br />&quot;Board database and directory name:&quot; is the only field you have to fill, the others get filled with default values from &quot;includes/default_settings.php&quot;.<br /><br />Click on “Advanced options” for more settings.',
 	'QI_MANAGE_PROFILE'	=> 'Manage profiles',
 	'QI_TZ'				=> 'Time zone',
-	'QI_TZ_EXPLAIN'		=> 'Your time zone. It will be the defaut time zone for the created boards. -1, 0, 1 etc.',
+	'QI_TZ_EXPLAIN'		=> 'Your time zone. It will be the default time zone for the created boards.<br />For the 3.0 line it will be converted to numerical timezone and DST.',
 	'QUICKINSTALL'		=> 'phpBB QuickInstall',
 
 	'REDIRECT'			=> 'Redirect',
@@ -262,6 +262,8 @@ $lang = array_merge($lang, array(
 	'SAVE_RESTORE'		=> 'Save/Restore',
 	'SELECT'			=> 'Select',
 	'SELECT_PROFILE'	=> 'Select profile',
+	'SET_DEFAULT_STYLE'	=> 'Set default style',
+	'SET_DEFAULT_STYLE_EXPLAIN'	=> 'Write the name of the style you want as default style. Should be found in styles/[style name]/style.cfg. Defaults to prosilver if empty or the style can’t be installed.',
 	'SETTINGS'			=> 'Settings',
 	'SETTINGS_FAILURE'	=> 'There were errors, take a look in the box below.',
 	'SETTINGS_NOT_WRITABLE'	=> 'The settings directory do not exist, is not a directory or is not writable.',
@@ -293,9 +295,7 @@ $lang = array_merge($lang, array(
 	'SQLITE_PATH_MISSING'	=> 'The entered database server path is either missing or not writeable.',
 	'STAR_MANDATORY'	=> '* = mandatory',
 	'SUBMIT'			=> 'Submit',
-	'SUBSILVER'			=> 'Install Subsilver2',
-	'SUBSILVER_EXPLAIN'	=> 'Select if you want the Subsilver2 theme to be installed and if you want it to be the default style.',
-	'SUBSILVER_DEFAULT'	=> 'subsilver2 default style',
+	'SUBSILVER_DEFAULT'	=> 'Set subsilver2 as default style',
 	'SUCCESS'			=> 'Success',
 	'SURE_DELETE_PROFILE'	=> 'Are you sure you want to delete this profile? It cannot be undone.',
 	'SURE_DELETE_BOARDS'	=> 'Are you sure you want to delete these boards/this board? It cannot be undone.',
@@ -328,4 +328,14 @@ $lang = array_merge($lang, array(
 	'WHO_WHEN_EXPLAIN'	=> 'phpBB3 QuickInstall was originally created by Igor “igorw” Wiedler in the summer of 2007. It was partially rewritten by him in march 2008.<br />Since March 2010 this project is mantained by Jari “tumba25” Kanerva.',
 	'WHY'				=> 'Why?',
 	'WHY_EXPLAIN'		=> 'Just as with phpBB2, if you do a lot of modding (creating modifications), you cannot put all MODs into a single phpBB installation. So it’s best to have separate installations. Now the problem is that it’s a pain to copy the files and go through the installation process every time. To speed up this process, quickinstall was born.',
+
+	// Config updated strings.
+	'UPDATED_EXPLAIN'	=> 'Your profile has been updated to this version of QI (%s). The changes made are defined below. They have been set to default values. also defined below.<br />You might want to look into the Settings page (link at the bottom) and set them to your desired values. If you have more than one profile, just press the button below to get all profiles updated.', // %s will be replaced with QI version.
+	'PROFILE_UPDATED'	=> 'Profile &quot;%s&quot; updated', // %s will be replaced by a profile name.
+	'PROFILES_UPDATED'	=> 'The following profiles has been updated',
+	'UPDATE_PROFILES'	=> 'Update profiles',
+
+	'DST_REMOVED'		=>	'The DST setting has been removed (qi_dst).',
+	'TIMEZONE_UPDATED'	=>	'Your timezone setting has been updated from numerical to string (qi_tz), default is UTC.',
+
 ));

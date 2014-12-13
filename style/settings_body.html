@@ -137,13 +137,11 @@
 		<legend><a id="time-settings"></a>{L_TIME_SETTINGS}</legend>
 		<dl>
 			<dt><label for="qi_tz">{L_QI_TZ}:*</label><br />{L_QI_TZ_EXPLAIN}</dt>
-			<dd><input class="text medium" type="text" id="qi_tz" name="qi_config[qi_tz]" value="{CONFIG_QI_TZ}" /></dd>
-		</dl>
-		<dl>
-			<dt><label>{L_QI_DST}:</label><br />{L_QI_DST_EXPLAIN}</dt>
 			<dd>
-				<label><input type="radio" class="radio" name="qi_config[qi_dst]" value="1"<!-- IF CONFIG_QI_DST == 1 --> checked="checked"<!-- ENDIF --> /> {L_ON}</label>
-				<label><input type="radio" class="radio" name="qi_config[qi_dst]" value="0"<!-- IF CONFIG_QI_DST == 0 --> checked="checked"<!-- ENDIF --> /> {L_OFF}</label>
+				<select name="qi_config[qi_tz]" id="qi_tz">
+					<option value="">{L_SELECT_TIMEZONE}</option>
+					{TIMEZONE_OPTIONS}
+				</select>
 			</dd>
 		</dl>
 	</fieldset>
@@ -354,17 +352,9 @@
 				<label><input type="radio" class="radio" name="qi_config[automod]" value="0"<!-- IF CONFIG_AUTOMOD == 0 --> checked="checked"<!-- ENDIF --> /> {L_NO}</label>
 			</dd>
 		</dl>
-		<dl>
-			<dt><label>{L_SUBSILVER}:</label><br />{L_SUBSILVER_EXPLAIN}<br />{L_ONLY_30}<br />{L_THIS_CAN_CHANGE}</dt>
-			<dd>
-				<label><input type="radio" class="radio" name="qi_config[subsilver]" value="1"<!-- IF CONFIG_SUBSILVER == 1 --> checked="checked"<!-- ENDIF --> /> {L_YES}</label>
-				<label><input type="radio" class="radio" name="qi_config[subsilver]" value="2"<!-- IF CONFIG_SUBSILVER == 2 --> checked="checked"<!-- ENDIF --> /> {L_YES}, {L_DEFAULT}</label>
-				<label><input type="radio" class="radio" name="qi_config[subsilver]" value="0"<!-- IF CONFIG_SUBSILVER == 0 --> checked="checked"<!-- ENDIF --> /> {L_NO}</label>
-			</dd>
-		</dl>
 
 		<dl>
-			<dt><label for="populate">{L_INSTALL_STYLES}:</label><br />{L_INSTALL_STYLES_EXPLAIN}<br />Currently only available for phpBB 3.1.x<br />{L_THIS_CAN_CHANGE}</dt>
+			<dt><label for="populate">{L_INSTALL_STYLES}:</label><br />{L_INSTALL_STYLES_EXPLAIN}<br />{L_THIS_CAN_CHANGE}</dt>
 			<dd>
 				<label><input type="radio" class="radio" name="qi_config[install_styles]" value="1"<!-- IF CONFIG_INSTALL_STYLES == 1 --> checked="checked"<!-- ENDIF --> /> {L_YES}</label>
 				<label><input type="radio" class="radio" name="qi_config[install_styles]" value="2"<!-- IF CONFIG_INSTALL_STYLES == 2 --> checked="checked"<!-- ENDIF --> /> {L_ONLY_SUBSILVER}</label>
@@ -372,11 +362,8 @@
 			</dd>
 		</dl>
 		<dl>
-			<dt><label for="populate">{L_SUBSILVER_DEFAULT}:</label><br />Currently only available for phpBB 3.1.x<br />{L_THIS_CAN_CHANGE}</dt>
-			<dd>
-				<label><input type="radio" class="radio" name="qi_config[default_style]" value="1"<!-- IF CONFIG_DEFAULT_STYLE == 1 --> checked="checked"<!-- ENDIF --> /> {L_YES}</label>
-				<label><input type="radio" class="radio" name="qi_config[default_style]" value="0"<!-- IF CONFIG_DEFAULT_STYLE == 0 --> checked="checked"<!-- ENDIF --> /> {L_NO}</label>
-			</dd>
+			<dt><label for="default_style">{L_SET_DEFAULT_STYLE}:</label><br />{L_SET_DEFAULT_STYLE_EXPLAIN}<br />{L_THIS_CAN_CHANGE}</dt>
+			<dd><input class="text medium" type="text" id="default_style" name="qi_config[default_style]" value="{CONFIG_DEFAULT_STYLE}" /></dd>
 		</dl>
 
 		<dl>

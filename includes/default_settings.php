@@ -29,8 +29,7 @@ function get_default_settings()
 		'boards_url'		=> 'boards/',
 		'make_writable'		=> 0,
 		'grant_permissions'	=> '',
-		'qi_tz'				=> 0,
-		'qi_dst'			=> 0,
+		'qi_tz'				=> 'UTC',
 		'admin_name'		=> 'admin',
 		'admin_pass'		=> 'password',
 		'admin_email'		=> 'qi_admin@phpbb-quickinstall.tld',
@@ -55,7 +54,6 @@ function get_default_settings()
 		'chunk_user'		=> '5000',
 		'redirect'			=> 1,
 		'automod'			=> 1,
-		'subsilver'			=> 0,
 		'populate'			=> 0,
 		'email_domain'		=> 'phpbb-quickinstall.tld',
 		'num_users'			=> 100,
@@ -69,6 +67,8 @@ function get_default_settings()
 		'num_replies_min'	=> 0,
 		'num_replies_max'	=> 50,
 		'no_dbpasswd'		=> 0,
+		'install_styles'	=> 0,
+		'default_style'		=> '',
 	);
 
 	return($config);

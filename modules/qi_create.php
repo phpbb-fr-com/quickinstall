@@ -342,9 +342,26 @@ class qi_create
 			'newest_username'	=> $admin_name,
 			'avatar_salt'		=> md5(mt_rand()),
 			'cookie_name'		=> 'phpbb3_' . strtolower(gen_rand_string(5)),
-			'board_timezone'	=> $settings->get_config('qi_tz', 0),
-			'board_dst'			=> $settings->get_config('qi_dst', 0),
 		);
+
+		if (defined('PHPBB_31'))
+		{
+			$config_ary['board_timezone'] = $settings->get_config('qi_tz', '');
+			$tz_data = "user_timezone = '{$config_ary['board_timezone']}'";
+		}
+		else
+		{
+			$tz		= new DateTimeZone($settings->get_config('qi_tz', ''));
+			$tz_ary	= $tz->getTransitions(time());
+			$offset	= (float) $tz_ary[0]['offset'] / 3600;	// 3600 seconds = 1 hour.
+			$dst	= ($tz_ary[0]['isdst']) ? 1 : 0;
+
+			$tz_data = "user_timezone = $offset, user_dst = $dst";
+			$config_ary['user_timezone'] = $offset;
+			$config_ary['user_dst'] = $dst;
+
+			unset($tz_ary, $tz, $offset, $dst);
+		}
 
 		if (@extension_loaded('gd') || can_load_dll('gd'))
 		{
@@ -377,10 +394,9 @@ class qi_create
 					user_lang		= '" . $db->sql_escape($default_lang) . "',
 					user_email		= '" . $db->sql_escape($settings->get_config('board_email')) . "',
 					user_dateformat	= '" . $db->sql_escape($user->lang['default_dateformat']) . "',
-					user_timezone	= " . (int) $settings->get_config('qi_tz', 0) . "," .
-					(!defined('PHPBB_31') ? "user_dst = " . (int) $settings->get_config('qi_dst', 0) . "," : '') . "
 					user_email_hash	= " . (crc32($settings->get_config('board_email')) . strlen($settings->get_config('board_email'))) . ",
-					username_clean	= '" . $db->sql_escape(utf8_clean_string($admin_name)) . "'
+					username_clean	= '" . $db->sql_escape(utf8_clean_string($admin_name)) . "',
+					$tz_data
 				WHERE username = 'Admin'",
 
 			"UPDATE {$table_prefix}moderator_cache
@@ -653,69 +669,28 @@ class qi_create
 		file_functions::copy_dir($quickinstall_path . 'sources/extra/', $board_dir);
 
 		// Install styles
-		if (($install_styles = $settings->get_config('install_styles', 0)) != 0 && defined('PHPBB_31'))
+		if (($install_styles = $settings->get_config('install_styles', 0)) != 0)
 		{
 			include($phpbb_root_path . 'includes/acp/acp_styles.' . $phpEx);
-			include($quickinstall_path . 'includes/class_31_styles.' . $phpEx);
 
 			if (!class_exists('bitfield'))
 			{
 				include($phpbb_root_path . 'includes/functions_content.' . $phpEx);
 			}
 
-			$subsilver_only		= ($install_styles == 2) ? true : false;
-			$subsilver_default	= ($settings->get_config('default_style', 0)) ? true :false;
-			new class_31_styles($subsilver_only, $subsilver_default);
-		}
-		else if ($settings->get_config('subsilver', 0) && !defined('PHPBB_31'))
-		{
-			if (!class_exists('bitfield'))
+			if (defined('PHPBB_31'))
 			{
-				include($phpbb_root_path . 'includes/functions_content.' . $phpEx);
+				include($quickinstall_path . 'includes/class_31_styles.' . $phpEx);
+
+				new class_31_styles($install_styles);
 			}
-			include($phpbb_root_path . 'includes/acp/acp_styles.' . $phpEx);
-			$acp_styles = new acp_styles();
-			$acp_styles->main(0, '');
-
-			// Mostly copied from includes/acp/acp_styles.php
-			$reqd_template = $reqd_theme = $reqd_imageset = false;
-			$error = $installcfg = $style_row = array();
-			$element_ary = array('template' => STYLES_TEMPLATE_TABLE, 'theme' => STYLES_THEME_TABLE, 'imageset' => STYLES_IMAGESET_TABLE);
-
-			$install_path = 'subsilver2';
-			$root_path = $phpbb_root_path . 'styles/subsilver2/';
-			$cfg_file = $root_path . 'style.cfg';
-			$installcfg = parse_cfg_file($cfg_file);
-
-			if (!sizeof($installcfg))
+			else
 			{
-				continue;
+
+				include($quickinstall_path . 'includes/class_30_styles.' . $phpEx);
+
+				new class_30_styles($install_styles);
 			}
-
-			$name		= $installcfg['name'];
-			$copyright	= $installcfg['copyright'];
-			$version	= $installcfg['version'];
-
-			$style_row = array(
-				'style_id'			=> 0,
-				'template_id'		=> 0,
-				'theme_id'			=> 0,
-				'imageset_id'		=> 0,
-				'style_name'		=> $installcfg['name'],
-				'template_name'		=> $installcfg['name'],
-				'theme_name'		=> $installcfg['name'],
-				'imageset_name'		=> $installcfg['name'],
-				'template_copyright'	=> $installcfg['copyright'],
-				'theme_copyright'	=> $installcfg['copyright'],
-				'imageset_copyright'	=> $installcfg['copyright'],
-				'style_copyright'	=> $installcfg['copyright'],
-				'store_db'			=> 0,
-				'style_active'		=> 1,
-				'style_default'		=> ($subsilver == 2) ? 1 : 0,
-			);
-
-			$acp_styles->install_style($error, 'install', $root_path, $style_row['style_id'], $style_row['style_name'], $install_path, $style_row['style_copyright'], $style_row['style_active'], $style_row['style_default'], $style_row);
-			unset($error);
 		}
 
 		// Add some random users and posts. Revisit.
