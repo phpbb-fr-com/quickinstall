@@ -144,7 +144,7 @@ $lang = array_merge($lang, array(
 	'ERROR_DEL_FILES'		=> 'Les fichiers suivants ne peuvent pas être supprimés',
 
 	'FUNCTIONS_MODS_MISSING'	=> '« includes/automod/functions_mods.php » non trouvé.',
-	'FORGOT_THIS'				=> 'VOUS AVEZ OUBLIÉ ÇA !', // Should be upper case.
+	'FORGOT_THIS'				=> 'VOUS AVEZ OUBLIÉ CECI !', // Should be upper case.
 	'FROM_README'				=> 'Le texte ci-dessous correspond au contenu du fichier « readme.txt ».<br />À ce jour, il n’est pas possible proposer une traduction de ce texte.',
 
 	'GENERAL_ERROR'				=> 'Erreur générale',
