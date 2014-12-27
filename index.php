@@ -96,6 +96,7 @@ if (!file_exists($quickinstall_path . 'sources/phpBB3/common.' . $phpEx))
 $page		= legacy_request_var('page', 'main');
 $mode		= legacy_request_var('mode', '');
 $profile	= legacy_request_var('qi_profile', '');
+$page		= ($page == 'docs') ? 'about' : $page;
 
 $settings = new settings($profile, $mode);
 
@@ -178,6 +179,13 @@ else
 $template = new template();
 $template->set_custom_template('style', 'qi');
 
+$profiles = $settings->get_profiles();
+if (empty($profiles['count']))
+{
+	$template->assign_var('S_NO_PROFILE', true);
+	$page = ($page == 'main' || $page == '') ? 'settings' : $page;
+}
+
 $template->assign_var('CONFIG_TEXT', false);
 
 // If there is a language selected in the dropdown menu in settings it's sent as GET, then igonre the hidden POST field.
@@ -222,11 +230,17 @@ $error = $settings->get_error();
 
 $page = (empty($error)) ? $page : 'settings';
 
-if ($settings->install || $settings->is_converted || $mode == 'update_settings' || $page == 'settings')
+if ($page == 'main' || $page == 'settings')
 {
-	$page = 'settings';
-	require($quickinstall_path . 'includes/qi_settings.' . $phpEx);
+	if ($settings->install || $settings->is_converted || $mode == 'update_settings' || $page == 'settings')
+	{
+		$page = 'settings';
+		require($quickinstall_path . 'includes/qi_settings.' . $phpEx);
+	}
 }
+
+// Hide manage boards if there is no saved config.
+$template->assign_var('S_IN_INSTALL', $settings->install);
 
 // now create a module_handler object
 $module	= new module_handler($quickinstall_path . 'modules/', 'qi_');

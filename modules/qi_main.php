@@ -39,8 +39,6 @@ class qi_main
 
 		// Assign index specific vars
 		$template->assign_vars(array(
-			'S_IN_INSTALL'	=> false,
-
 			'U_CREATE'			=> qi::url('create'),
 			'U_CHOOSE_PROFILE'	=> qi::url('main', array('mode' => 'change_profile')),
 
@@ -69,6 +67,7 @@ class qi_main
 			'S_DBPASSWD'	=> $settings->get_config('dbpasswd', false),
 			'S_NODBPASSWD'	=> $settings->get_config('no_dbpasswd', false),
 			'S_DBUSER'		=> $settings->get_config('dbuser', false),
+			'S_MAIN'		=> true,
 
 			'ALT_ENV'		=> get_alternative_env($settings->get_config('alt_env')),
 
