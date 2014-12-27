@@ -130,7 +130,7 @@ $lang = array_merge($lang, array(
 	'DELETE_SELECTED'				=> 'Supprimer la sélection',
 	'DIR_EXISTS'					=> 'Le répertoire <strong>%s</strong> existe déjà.',
 	'DIR_URL_SETTINGS'				=> 'Paramètres des répertoires et URL',
-	'DOCS_LONG'			=> 'Documentation',
+	'DOCS_LONG'						=> 'Documentation',
 	'DROP_DB_IF_EXISTS'				=> 'Supprimer la base de données si elle existe',
 	'DROP_DB_IF_EXISTS_EXPLAIN'		=> 'Activer par défaut « Supprimer la base de données si elle existe » lors de la création des forums.',
 
@@ -145,7 +145,7 @@ $lang = array_merge($lang, array(
 
 	'FUNCTIONS_MODS_MISSING'	=> '« includes/automod/functions_mods.php » non trouvé.',
 	'FORGOT_THIS'				=> 'VOUS AVEZ OUBLIÉ ÇA !', // Should be upper case.
-	'FROM_README'				=> 'Fichier « readme.txt »',
+	'FROM_README'				=> 'Le texte ci-dessous correspond au contenu du fichier « readme.txt ».<br />À ce jour, il n’est pas possible proposer une traduction de ce texte.',
 
 	'GENERAL_ERROR'				=> 'Erreur générale',
 	'GO'						=> 'Aller',
