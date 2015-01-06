@@ -174,7 +174,7 @@ $lang = array_merge($lang, array(
 	'MAX'							=> 'Max.',
 	'MIGHT_TAKE_LONG'				=> '<strong>Informations : </strong>La création du forum peut prendre un certain temps, souvent une minute voire plus. Faites donc attention à <strong>ne pas</strong> envoyer le formulaire deux fois !',
 	'MIN'							=> 'Min.',
-	'MINOR_MISHAP'			=> 'Incident mineur',
+	'MINOR_MISHAP'			=> 'Erreur',
 	'MISC_SETTINGS'			=> 'Paramètres divers',
 
 	'NEED_CONVERT'			=> 'Votre fichier de configuration doit être converti au nouveau format de gestion de profils. Assurez-vous que le dossier « settings » est présent et qu’il est accessible en écriture par PHP. Puis cliquez sur « Envoyer ».',
