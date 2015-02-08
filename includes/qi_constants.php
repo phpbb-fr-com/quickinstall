@@ -7,12 +7,7 @@
 *
 */
 
-define('QI_VERSION', '1.2.1-dev');
-
-// Chunk sizes
-define('CHUNK_POST', 1000);
-define('CHUNK_TOPIC', 2000);
-define('CHUNK_USER', 5000);
+define('QI_VERSION', '1.2.1-RC1');
 
 // Cookies set by QI
 define('QI_PROFILE_COOKIE', 'qi_profile');	// Cookie with the latest used profile name as payload.

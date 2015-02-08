@@ -11,11 +11,20 @@ QuickInstall Changelog
  + [Fix] QI tried to write to the "settings" folder even if it was not writable.
  + [Fix] The explain text for the Boards tab was not up to date.
  + [Fix] Issue #42 the install note box got more or less unreadable in some screen resolutions.
+ + [Fix] "schema.json" was removed in phpBB 3.1.3. QI used it to create the 3.1 DB. Now install of 3.1.x works again.
+ + [Fix] Ticket #44 QI removed uppercase letters from directory names due to a missing Hyphen "-".
+ + [Fix] Ticket #43 when run in server root dirname() on Windows returns a backslash QI did not handle that correct. (By Skouat)
  + [Change] Moved the "can take a while" warning box and the options/settings boxes.
  + [Change] Moved the header text to the sidebar in the PHP info tab.
  + [Change] Added some space abowe and below the "Check all" link.
  + [Change] Moved template var S_page to their respective file.
  + [Change] Changed some wordings and removed unused strings from language files.
+ + [Change] Changed default DBMS to MySQLi.
+ + [Change] Use the same name for the directory as the DB. Links to the boards get messed up with spaces.
+ + [Change] Allow hyphen and dot in directory names.
+ + [Change] Always try to login if redirect is set.
+ + [Change] Don't error out when the selected alt environment can't be found.
+ + [Change] Removed CHUNK_POST, CHUNK_TOPIC and CHUNK_USER constants. They have been in the settings for a while
  + [Feature] Added better error reporting and handling to more places.
  + [Feature] Don't show the select menu for alternative environments if the phpBB3_alt folder is empty.
  + [Feature] Show board version in boards list.
@@ -24,6 +33,7 @@ QuickInstall Changelog
  + [Feature] Any style can be set as default style.
  + [Feature] Automagically update settings. With link to update all profiles (only for 1.2.1 and up).
  + [Feature] Added a documentation tab, with info currently from readme.txt.
+ + [Feature] Only display the DBMS whose extensions are loaded on the settings page.
 
 - Changes since 1.1.8
  + [Fix] Ticket #63309 The first release in the changelog was broken.

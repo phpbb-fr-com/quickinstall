@@ -16,6 +16,38 @@ if (!defined('IN_QUICKINSTALL'))
 }
 
 /**
+ * Generate DBMS select options for the settings tab.
+ * Checks that each extension is loaded.
+ *
+ * @todo add more DBMS to QI.
+ *
+ * @param $default string, the DBMS to set as selected
+ * @return string with options.
+ */
+function gen_dbms_options($default = 'mysqli')
+{
+	$dbms_ary = array(
+		'mysqli'	=> 'MySQLi',
+		'mysql'		=> 'MySQL',
+		'mssql'		=> 'MSSQL',
+		'pgsql'		=> 'PostgreSQL',
+		'sqlite'	=> 'SQLite',
+	);
+
+	$options = '';
+	foreach ($dbms_ary as $ext => $title)
+	{
+		if (extension_loaded($ext))
+		{
+			$selected = ($ext == $default) ? ' selected="selected"' : '';
+			$options .= "<option value='$ext'$selected>$title</option>";
+		}
+	}
+
+	return($options);
+}
+
+/**
 * Borrowed from phpBB 3.1 includes/functions.php/phpbb_format_timezone_offset()
 * To have it available for 3.0.x too.
 *
@@ -374,11 +406,13 @@ function legacy_request_var($var_name, $default, $multibyte = false, $cookie = f
 }
 
 /**
- * Validates the db name to not contain any unwanted chars.
+ * Validates the db name, to not contain any unwanted chars.
  * @param string $dbname, string to validate.
+ * @param bool $first_char, if true adds 'qi' before $dbname if it starts with a underline.
+ * @param bool $path, if true allows hyphen and dot. Otherwise they will be replaced with underline.
  * @return string $dbname, validated name.
  */
-function validate_dbname($dbname, $first_char = false)
+function validate_dbname($dbname, $first_char = false, $path = false)
 {
 	if (empty($dbname))
 	{
@@ -392,11 +426,11 @@ function validate_dbname($dbname, $first_char = false)
 	$dbname = str_replace($chars_int_src, $chars_int_dest, $dbname);
 
 	// Replace these with a underscore.
-	$chars_replace = array(' ', '&', '/', '–', '-', '.');
+	$chars_replace = ($path) ? array(' ', '&', '/', '–') : array(' ', '&', '/', '–', '-', '.');
 	$dbname = str_replace($chars_replace, '_', $dbname);
 
 	// Just drop remaining non valid chars.
-	$dbname = preg_replace('/[^A-Za-z0-9_]*/', '', $dbname);
+	$dbname = preg_replace('/[^A-Za-z0-9-_]*/', '', $dbname);
 
 	// make sure that the first char is not a underscore if set.
 	$prefix = ($first_char && $dbname[0] == '_') ? 'qi' : '';
