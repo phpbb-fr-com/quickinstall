@@ -1,0 +1,1419 @@
+<?php
+/**
+ *
+ * QuickInstall CLI
+ *
+ * @copyright (c) 2026 phpBB Limited <https://www.phpbb.com>
+ * @license       GNU General Public License, version 2 (GPL-2.0)
+ *
+ */
+
+namespace QuickInstall\Sandbox;
+
+use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
+
+/** CLI command dispatcher and presentation layer. */
+class Application
+{
+	private Project $project;
+	private BrowserLauncher $browserLauncher;
+	private $stderr;
+	private $stdin;
+
+	public function __construct(string $root, $stderr = null, $stdin = null, ?BrowserLauncher $browserLauncher = null)
+	{
+		$this->project = new Project($root);
+		$this->browserLauncher = $browserLauncher ?: new BrowserLauncher();
+		$this->stderr = $stderr ?: (defined('STDERR') ? STDERR : fopen('php://stderr', 'wb'));
+		$this->stdin = $stdin ?: (defined('STDIN') ? STDIN : null);
+	}
+
+	public function run(array $argv): int
+	{
+		array_shift($argv);
+		$command = array_shift($argv) ?: 'help';
+		if (!in_array($command, ['help', '--help', '-h'], true) && (in_array('--help', $argv, true) || in_array('-h', $argv, true)))
+		{
+			$this->help([$command]);
+			return 0;
+		}
+
+		$operationLock = null;
+		try
+		{
+			// CLI and Dashboard mutations share one lock so their multi-file work
+			// cannot interleave. Read-only commands deliberately remain concurrent.
+			if ($this->mutatesWorkspace($command))
+			{
+				$operationLock = $this->project->lockOperations();
+			}
+			switch ($command)
+			{
+				case 'help':
+				case '--help':
+				case '-h':
+					$this->help($argv);
+					return 0;
+
+				case 'init':
+					return $this->init();
+
+				case 'doctor':
+					return $this->doctor();
+
+				case 'source:list':
+					return $this->sourceList();
+
+				case 'source:fetch':
+					return $this->sourceFetch($argv);
+
+				case 'source:remove':
+					return $this->sourceRemove($argv);
+
+				case 'source:prune':
+					return $this->sourcePrune();
+
+				case 'phpbb:list':
+					return $this->phpbbList();
+
+				case 'board:create':
+					return $this->boardCreate($argv);
+
+				case 'board:list':
+					return $this->boardList();
+
+				case 'board:start':
+					return $this->boardStart($argv);
+
+				case 'board:stop':
+					return $this->boardStop($argv);
+
+				case 'board:destroy':
+					return $this->boardDestroy($argv);
+
+				case 'board:seed':
+					return $this->boardSeed($argv);
+
+				case 'ext:mount':
+					return $this->extMount($argv);
+
+				case 'ext:unmount':
+					return $this->extUnmount($argv);
+
+				case 'ext:list':
+					return $this->extList($argv);
+
+				case 'style:mount':
+					return $this->styleMount($argv);
+
+				case 'style:unmount':
+					return $this->styleUnmount($argv);
+
+				case 'style:list':
+					return $this->styleList($argv);
+
+				case 'lang:mount':
+					return $this->langMount($argv);
+
+				case 'lang:unmount':
+					return $this->langUnmount($argv);
+
+				case 'lang:list':
+					return $this->langList($argv);
+
+				case 'ui:start':
+					return $this->uiStart($argv);
+
+				case 'ui:stop':
+					return $this->uiStop();
+
+				case 'ui:restart':
+					return $this->uiRestart($argv);
+
+				case 'ui:status':
+					return $this->uiStatus();
+
+				default:
+					$this->writeError("Unknown command: $command\n\n");
+					$this->help();
+					return 1;
+			}
+		}
+		catch (InvalidArgumentException|RuntimeException $e)
+		{
+			$this->writeError($e->getMessage() . "\n");
+			return 1;
+		}
+		finally
+		{
+			$this->project->unlockOperations($operationLock);
+			try
+			{
+				$this->printUpdateNotice($command, $argv);
+			}
+			catch (Throwable $e)
+			{
+				// Update notifications must never change command success or failure.
+			}
+		}
+	}
+
+	private function mutatesWorkspace(string $command): bool
+	{
+		return in_array($command, [
+			'init', 'source:fetch', 'source:remove', 'source:prune',
+			'board:create', 'board:start', 'board:stop', 'board:destroy', 'board:seed',
+			'ext:mount', 'ext:unmount', 'style:mount', 'style:unmount', 'lang:mount', 'lang:unmount',
+			'ui:start', 'ui:stop', 'ui:restart',
+		], true);
+	}
+
+	private function init(): int
+	{
+		$created = $this->project->init();
+		if (!$created)
+		{
+			echo "QuickInstall workspace already initialized\n";
+			return 0;
+		}
+
+		echo "Created " . implode(' and ', $created) . "\n";
+		return 0;
+	}
+
+	private function sourceList(): int
+	{
+		$sources = (new SourceService($this->project, $this->sandboxOutput()))->list();
+
+		if (!$sources)
+		{
+			echo "No sources registered\n";
+			return 0;
+		}
+
+		$this->printTable(
+			['Source', 'Version', 'Type', 'Status', 'Downloaded', 'Used By', 'Path'],
+			array_map(static function ($source) {
+				return [
+					$source['source_key'] ?? $source['version'],
+					$source['version'],
+					$source['type'],
+					$source['status'] ?? '-',
+					!empty($source['downloaded']) ? 'yes' : 'no',
+					!empty($source['used_by']) ? implode(', ', $source['used_by']) : '-',
+					$source['path'],
+				];
+			}, $sources)
+		);
+
+		return 0;
+	}
+
+	private function sourceRemove(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$version = $cli->argument(0);
+		if ($version === null)
+		{
+			throw new InvalidArgumentException('Usage: qi source:remove <version|source> [--force]');
+		}
+
+		$removed = (new SourceService($this->project, $this->sandboxOutput()))->remove($version, $cli->has('force'));
+		echo "Removed source: {$removed['source']['source_key']}\n";
+		if (!empty($removed['used_by']))
+		{
+			echo "Warning: source was referenced by board(s): " . implode(', ', $removed['used_by']) . "\n";
+		}
+
+		return 0;
+	}
+
+	private function sourcePrune(): int
+	{
+		$removed = (new SourceService($this->project, $this->sandboxOutput()))->prune();
+		if (!$removed)
+		{
+			echo "No unused sources to prune\n";
+			return 0;
+		}
+
+		foreach ($removed as $source)
+		{
+			echo "Removed source: {$source['source_key']}\n";
+		}
+
+		return 0;
+	}
+
+	private function sourceFetch(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$version = $cli->argument(0);
+		if ($version === null)
+		{
+			throw new InvalidArgumentException('Usage: qi source:fetch <version|branch> [--git] [--url URL] [--allow-external]');
+		}
+
+		$record = (new SourceService($this->project, $this->sandboxOutput()))->fetch($version, $cli->has('git'), $cli->option('url'), $cli->has('allow-external'));
+
+		echo "Fetched phpBB source: {$record['path']}\n";
+		return 0;
+	}
+
+	private function phpbbList(): int
+	{
+		$this->printTable(
+			['Selector', 'Status', 'PHP', 'Resolves To', 'Notes'],
+			array_map(static function ($row) {
+				return [
+					$row['selector'],
+					$row['status'],
+					$row['php'] === '-' ? '-' : 'PHP ' . $row['php'],
+					$row['resolves_to'],
+					$row['notes'],
+				];
+			}, (new SourceService($this->project, $this->sandboxOutput()))->supportedVersions())
+		);
+
+		return 0;
+	}
+
+	private function boardCreate(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$name = $cli->argument(0);
+		if ($name === null)
+		{
+			throw new InvalidArgumentException('Usage: qi board:create <name> [--phpbb VERSION] [--db mariadb|mysql|postgres|sqlite] [--port PORT] [--populate PRESET] [--debug] [--replace]');
+		}
+
+		$version = $cli->option('phpbb', 'latest');
+		$db = $cli->option('db', 'mariadb');
+		$db = $db === 'sqlite3' ? 'sqlite' : $db;
+		$port = (int) $cli->option('port', '8080');
+		$populate = $cli->option('populate', 'none');
+		$debug = $cli->has('debug');
+		$this->validateBoardCreateOptions($db, $port, $populate);
+		if (SeedPresetCatalog::isDeprecated($populate))
+		{
+			echo 'Warning: ' . SeedPresetCatalog::deprecationMessage() . "\n";
+		}
+
+		$created = (new BoardService($this->project, $this->sandboxOutput()))->create($name, $version, $db, $port, $populate, $debug, $cli->has('replace'));
+		$paths = $created['paths'];
+
+		echo "Created board scaffold: $name\n";
+		echo "Compose: {$paths['compose']}\n";
+		echo "Install config: {$paths['install_config']}\n";
+		echo "URL after start: {$created['board']['url']}\n";
+		if ($populate !== 'none')
+		{
+			echo "Populate preset: $populate (runs on board:start)\n";
+		}
+		if ($debug)
+		{
+			echo "Debug mode: enabled on board:start\n";
+		}
+		$this->nextStep("php bin/qi board:start $name");
+		if ($this->confirm('Run this command now? [Y/n]: ', true))
+		{
+			return $this->boardStart([$name]);
+		}
+
+		return 0;
+	}
+
+	private function boardList(): int
+	{
+		$boards = (new BoardService($this->project, $this->sandboxOutput()))->list();
+		if (!$boards)
+		{
+			echo "No boards created\n";
+			return 0;
+		}
+
+		$this->printTable(
+			['Name', 'Status', 'phpBB', 'PHP', 'DB', 'Populate', 'Debug', 'URL'],
+			array_map(static function ($board) {
+				return [
+					$board['name'],
+					$board['status'],
+					$board['phpbb'],
+					$board['php'],
+					$board['db'],
+					$board['populate'] ?? 'none',
+					!empty($board['debug']) ? 'yes' : 'no',
+					$board['url'],
+				];
+			}, $boards)
+		);
+
+		return 0;
+	}
+
+	private function printTable(array $headers, array $rows): void
+	{
+		$widths = array_map('strlen', $headers);
+		foreach ($rows as $row)
+		{
+			foreach ($row as $index => $value)
+			{
+				$widths[$index] = max($widths[$index], strlen((string) $value));
+			}
+		}
+
+		$this->printTableRow($headers, $widths);
+		$this->printTableRow(array_map(static function ($width) {
+			return str_repeat('-', $width);
+		}, $widths), $widths);
+
+		foreach ($rows as $row)
+		{
+			$this->printTableRow($row, $widths);
+		}
+	}
+
+	private function printTableRow(array $row, array $widths): void
+	{
+		$cells = [];
+		foreach ($row as $index => $value)
+		{
+			$cells[] = str_pad((string) $value, $widths[$index]);
+		}
+
+		echo implode('  ', $cells) . "\n";
+	}
+
+	private function nextStep(string $text): void
+	{
+		echo "\n" . $this->style('NEXT:', '1;33') . " " . $this->style($text, '1') . "\n";
+	}
+
+	private function confirm(string $question, bool $default = false): bool
+	{
+		if (!$this->shouldPrompt())
+		{
+			return false;
+		}
+
+		while (true)
+		{
+			echo $question;
+			$answer = fgets($this->stdin);
+			if ($answer === false)
+			{
+				echo "\n";
+				return false;
+			}
+
+			$answer = strtolower(trim($answer));
+			if ($answer === '')
+			{
+				return $default;
+			}
+			if ($answer === 'y' || $answer === 'yes')
+			{
+				return true;
+			}
+			if ($answer === 'n' || $answer === 'no')
+			{
+				return false;
+			}
+
+			echo "Please answer y or n.\n";
+		}
+	}
+
+	private function shouldPrompt(): bool
+	{
+		if (!is_resource($this->stdin))
+		{
+			return false;
+		}
+
+		if (defined('STDIN') && $this->stdin === STDIN)
+		{
+			if (function_exists('stream_isatty'))
+			{
+				return stream_isatty(STDIN);
+			}
+			return !function_exists('posix_isatty') || posix_isatty(STDIN);
+		}
+
+		return true;
+	}
+
+	private function doctor(): int
+	{
+		$checks = (new DoctorService($this->project))->checks();
+		$failed = false;
+		echo $this->style('QuickInstall requirements', '1') . "\n";
+		foreach ($checks as $check)
+		{
+			$status = $check['ok']
+				? $this->style('[OK]', '1;32')
+				: $this->style('[FAIL]', '1;31');
+			echo "$status {$check['name']}: {$check['detail']}\n";
+			$failed = $failed || !$check['ok'];
+		}
+
+		return $failed ? 1 : 0;
+	}
+
+	private function style(string $text, string $code): string
+	{
+		if (!$this->supportsAnsi())
+		{
+			return $text;
+		}
+
+		return "\033[" . $code . "m" . $text . "\033[0m";
+	}
+
+	private function supportsAnsi(): bool
+	{
+		if (getenv('NO_COLOR') !== false)
+		{
+			return false;
+		}
+
+		if (function_exists('posix_isatty') && defined('STDOUT'))
+		{
+			return posix_isatty(STDOUT);
+		}
+		if (function_exists('stream_isatty') && defined('STDOUT') && !stream_isatty(STDOUT))
+		{
+			return false;
+		}
+		if (PHP_OS_FAMILY === 'Windows' && function_exists('sapi_windows_vt100_support') && defined('STDOUT'))
+		{
+			return sapi_windows_vt100_support(STDOUT, true);
+		}
+
+		return PHP_SAPI === 'cli';
+	}
+
+	private function boardStart(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$name = $cli->argument(0);
+		if ($name === null)
+		{
+			throw new InvalidArgumentException('Usage: qi board:start <name> [--no-open]');
+		}
+		$board = (new BoardService($this->project, $this->sandboxOutput()))->start($name);
+		echo "Started board: $name\n";
+		echo "URL: {$board['url']}\n";
+		$this->openBrowser($board['url'], $cli);
+		return 0;
+	}
+
+	private function boardStop(array $args): int
+	{
+		$name = $this->boardName($args, 'Usage: qi board:stop <name>');
+		(new BoardService($this->project, $this->sandboxOutput()))->stop($name);
+		echo "Stopped board: $name\n";
+		return 0;
+	}
+
+	private function boardDestroy(array $args): int
+	{
+		$name = $this->boardName($args, 'Usage: qi board:destroy <name>');
+		(new BoardService($this->project, $this->sandboxOutput()))->destroy($name);
+		echo "Destroyed board: $name\n";
+		return 0;
+	}
+
+	private function boardSeed(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$name = $cli->argument(0);
+		if ($name === null)
+		{
+			throw new InvalidArgumentException('Usage: qi board:seed <name> --preset tiny|development|load-test|random [--seed N] [--reset|--replace]');
+		}
+
+		$preset = trim($cli->option('preset', ''));
+		if ($preset === '')
+		{
+			throw new InvalidArgumentException('--preset is required. Choose one of: ' . implode(', ', SeedPresetCatalog::visible()) . '.');
+		}
+		$seed = (int) $cli->option('seed', '1');
+		$this->validatePreset($preset);
+		if (SeedPresetCatalog::isDeprecated($preset))
+		{
+			echo 'Warning: ' . SeedPresetCatalog::deprecationMessage() . "\n";
+		}
+		if ($seed < 1)
+		{
+			throw new InvalidArgumentException('--seed must be a positive integer.');
+		}
+		if ($cli->has('reset') && $cli->has('replace'))
+		{
+			throw new InvalidArgumentException('Use --reset or --replace, not both.');
+		}
+		$action = $cli->has('reset') ? 'reset' : ($cli->has('replace') ? 'replace' : 'seed');
+
+		(new BoardService($this->project, $this->sandboxOutput()))->seed($name, $preset, $seed, $action);
+		echo ucfirst($action) . " completed for board: $name\n";
+		return 0;
+	}
+
+	private function boardName(array $args, string $usage): string
+	{
+		$cli = CommandLine::parse($args);
+		$name = $cli->argument(0);
+		if ($name === null)
+		{
+			throw new InvalidArgumentException($usage);
+		}
+
+		return $name;
+	}
+
+	private function validateBoardCreateOptions(string $db, int $port, string $populate): void
+	{
+		if (!in_array($db, ['mariadb', 'mysql', 'postgres', 'sqlite'], true))
+		{
+			throw new InvalidArgumentException('--db must be one of: mariadb, mysql, postgres, sqlite.');
+		}
+
+		if ($port < 1 || $port > 65535)
+		{
+			throw new InvalidArgumentException('--port must be between 1 and 65535.');
+		}
+
+		if ($populate !== 'none')
+		{
+			$this->validatePreset($populate);
+		}
+
+		if ($db === 'sqlite' && !SeedPresetCatalog::supportsSqlitePopulate($populate))
+		{
+			throw new InvalidArgumentException('SQLite boards support --populate none, tiny, or development only. Use mariadb, mysql, or postgres for heavier fixture presets.');
+		}
+	}
+
+	private function validatePreset(string $preset): void
+	{
+		SeedPresetCatalog::validate($preset);
+	}
+
+	private function extMount(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$board = $cli->argument(0);
+		$source = $cli->argument(1);
+		if ($board === null || $source === null)
+		{
+			throw new InvalidArgumentException('Usage: qi ext:mount <board> <path> [--copy] [--recursive] [--allow-external]');
+		}
+		if ($cli->has('recursive') && $cli->has('copy'))
+		{
+			throw new InvalidArgumentException('--recursive cannot be combined with --copy. Mount recursively with bind mode, or copy individual extensions.');
+		}
+
+		return $this->mountResources('extension', new ExtensionManager($this->project), $board, $source, $cli->has('copy'), $cli->has('recursive'), $cli->has('allow-external'));
+	}
+
+	private function extUnmount(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$board = $cli->argument(0);
+		$name = $cli->argument(1);
+		if ($board === null || $name === null)
+		{
+			throw new InvalidArgumentException('Usage: qi ext:unmount <board> <vendor/extension>');
+		}
+
+		$extensions = new ExtensionManager($this->project);
+		$target = (new CustomisationUnmountService($this->project))->extension($extensions, $board, $name);
+		echo "Unmounted $name from $board\n";
+		echo "Removed: $target\n";
+		return 0;
+	}
+
+	private function refreshBoardIfRunning(string $board): void
+	{
+		(new BoardRefreshService($this->project))->refreshIfRunning($board);
+	}
+
+	private function uiStart(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		[$host, $port] = $this->uiOptions($cli);
+		$result = (new UiServerService($this->project))->start($host, $port);
+		$state = $result['state'];
+		if ($result['status'] === 'already_running')
+		{
+			echo "QuickInstall Dashboard UI is already running: {$state['url']}\n";
+			$this->openBrowser($state['url'], $cli);
+			return 0;
+		}
+
+		echo "QuickInstall Dashboard UI started: {$state['url']}\n";
+		echo "PID: {$state['pid']}\n";
+		echo "Log: {$state['log']}\n";
+		echo "Stop it with: php bin/qi ui:stop\n";
+		$this->openBrowser($state['url'], $cli);
+
+		return 0;
+	}
+
+	private function openBrowser(string $url, CommandLine $cli): void
+	{
+		if ($cli->has('no-open'))
+		{
+			return;
+		}
+
+		if ($this->browserLauncher->open($url))
+		{
+			echo "Opened in your default browser.\n";
+			return;
+		}
+
+		$this->writeError("Unable to open the default browser. Open this URL manually: $url\n");
+	}
+
+	private function uiStop(): int
+	{
+		$result = (new UiServerService($this->project))->stop();
+		$state = $result['state'];
+		if ($result['status'] === 'not_tracked')
+		{
+			echo "QuickInstall Dashboard UI is not tracked as running.\n";
+			return 0;
+		}
+
+		if ($result['status'] === 'stopped')
+		{
+			echo "Stopped QuickInstall Dashboard UI";
+			if (!empty($state['url']))
+			{
+				echo ": {$state['url']}";
+			}
+		}
+		else
+		{
+			echo "QuickInstall Dashboard UI process was not running";
+			$pid = (int) ($state['pid'] ?? 0);
+			if ($pid > 0)
+			{
+				echo " (PID $pid)";
+			}
+		}
+		echo "\n";
+
+		return 0;
+	}
+
+	private function uiRestart(array $args): int
+	{
+		$this->uiStop();
+		return $this->uiStart($args);
+	}
+
+	private function uiStatus(): int
+	{
+		$result = (new UiServerService($this->project))->status();
+		$state = $result['state'];
+		if ($result['status'] === 'running')
+		{
+			echo "QuickInstall Dashboard UI is running\n";
+			echo "URL: {$state['url']}\n";
+			echo "PID: {$state['pid']}\n";
+			echo "Log: {$state['log']}\n";
+			return 0;
+		}
+
+		if ($result['status'] === 'stale')
+		{
+			echo "QuickInstall Dashboard UI is not running, but stale state exists.\n";
+			echo "Last URL: " . ($state['url'] ?? '(unknown)') . "\n";
+			echo "Run: php bin/qi ui:stop\n";
+			return 1;
+		}
+
+		echo "QuickInstall Dashboard UI is not running.\n";
+		return 0;
+	}
+
+	private function uiOptions(CommandLine $cli): array
+	{
+		$host = $cli->option('host', '127.0.0.1');
+		$port = (int) $cli->option('port', '8079');
+		if (!in_array($host, ['127.0.0.1', 'localhost', '::1'], true))
+		{
+			throw new InvalidArgumentException('ui:start only supports local loopback hosts: 127.0.0.1, localhost, or ::1.');
+		}
+		if ($port < 1 || $port > 65535)
+		{
+			throw new InvalidArgumentException('--port must be between 1 and 65535.');
+		}
+
+		return [$host, $port];
+	}
+
+	private function extList(array $args): int
+	{
+		$board = $this->boardName($args, 'Usage: qi ext:list <board>');
+		$mounted = (new ExtensionManager($this->project))->list($board);
+
+		if (!$mounted)
+		{
+			echo "No extensions mounted for board: $board\n";
+			return 0;
+		}
+
+		$this->printTable(
+			['Extension', 'Mode', 'Source'],
+			array_map(static function ($extension) {
+				return [
+					$extension['name'],
+					$extension['mode'],
+					$extension['source'],
+				];
+			}, $mounted)
+		);
+
+		return 0;
+	}
+
+	private function styleMount(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$board = $cli->argument(0);
+		$source = $cli->argument(1);
+		if ($board === null || $source === null)
+		{
+			throw new InvalidArgumentException('Usage: qi style:mount <board> <path> [--copy] [--recursive] [--allow-external]');
+		}
+		if ($cli->has('recursive') && $cli->has('copy'))
+		{
+			throw new InvalidArgumentException('--recursive cannot be combined with --copy. Mount recursively with bind mode, or copy individual styles.');
+		}
+
+		return $this->mountResources('style', new StyleManager($this->project), $board, $source, $cli->has('copy'), $cli->has('recursive'), $cli->has('allow-external'));
+	}
+
+	private function styleUnmount(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$board = $cli->argument(0);
+		$name = $cli->argument(1);
+		if ($board === null || $name === null)
+		{
+			throw new InvalidArgumentException('Usage: qi style:unmount <board> <style>');
+		}
+
+		$styles = new StyleManager($this->project);
+		$target = (new CustomisationUnmountService($this->project))->style($styles, $board, $name);
+		echo "Unmounted $name from $board\n";
+		echo "Removed: $target\n";
+		return 0;
+	}
+
+	private function styleList(array $args): int
+	{
+		$board = $this->boardName($args, 'Usage: qi style:list <board>');
+		$mounted = (new StyleManager($this->project))->list($board);
+
+		if (!$mounted)
+		{
+			echo "No styles mounted for board: $board\n";
+			return 0;
+		}
+
+		$this->printTable(
+			['Style', 'Mode', 'Source'],
+			array_map(static function ($style) {
+				return [
+					$style['name'],
+					$style['mode'],
+					$style['source'],
+				];
+			}, $mounted)
+		);
+
+		return 0;
+	}
+
+	private function langMount(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$board = $cli->argument(0);
+		$source = $cli->argument(1);
+		if ($board === null || $source === null)
+		{
+			throw new InvalidArgumentException('Usage: qi lang:mount <board> <path> [--copy] [--recursive] [--allow-external]');
+		}
+		if ($cli->has('recursive') && $cli->has('copy'))
+		{
+			throw new InvalidArgumentException('--recursive cannot be combined with --copy. Mount recursively with bind mode, or copy individual languages.');
+		}
+
+		return $this->mountResources('language', new LanguageManager($this->project), $board, $source, $cli->has('copy'), $cli->has('recursive'), $cli->has('allow-external'));
+	}
+
+	private function langUnmount(array $args): int
+	{
+		$cli = CommandLine::parse($args);
+		$board = $cli->argument(0);
+		$name = $cli->argument(1);
+		if ($board === null || $name === null)
+		{
+			throw new InvalidArgumentException('Usage: qi lang:unmount <board> <iso>');
+		}
+
+		$languages = new LanguageManager($this->project);
+		$target = (new CustomisationUnmountService($this->project))->language($languages, $board, $name);
+		echo "Unmounted $name from $board\n";
+		echo "Removed: $target\n";
+		return 0;
+	}
+
+	private function langList(array $args): int
+	{
+		$board = $this->boardName($args, 'Usage: qi lang:list <board>');
+		$mounted = (new LanguageManager($this->project))->list($board);
+
+		if (!$mounted)
+		{
+			echo "No languages mounted for board: $board\n";
+			return 0;
+		}
+
+		$this->printTable(
+			['Language', 'Mode', 'Source'],
+			array_map(static function ($language) {
+				return [
+					$language['name'],
+					$language['mode'],
+					$language['source'],
+				];
+			}, $mounted)
+		);
+
+		return 0;
+	}
+
+	private function printBulkMountResult(string $type, string $board, array $mounted, array $errors): void
+	{
+		if (!$mounted && !$errors)
+		{
+			echo "No {$type}s found for board: $board\n";
+			return;
+		}
+
+		foreach ($mounted as $item)
+		{
+			echo "Mounted {$item['name']} on $board ({$item['mode']})\n";
+		}
+
+		foreach ($errors as $error)
+		{
+			$this->writeError("Skipped $type: $error\n");
+		}
+	}
+
+	private function writeError(string $message): void
+	{
+		fwrite($this->stderr, $message);
+	}
+
+	private function printUpdateNotice(string $command, array $args): void
+	{
+		if (in_array($command, ['help', '--help', '-h'], true) || in_array('--help', $args, true) || in_array('-h', $args, true))
+		{
+			return;
+		}
+
+		$update = (new UpdateService($this->project))->getUpdate();
+		if ($update === null)
+		{
+			return;
+		}
+
+		echo "\nQuickInstall {$update['current']} available";
+		if (!empty($update['download']))
+		{
+			echo ": {$update['download']}";
+		}
+		echo "\n";
+	}
+
+	private function sandboxOutput(): Output
+	{
+		$stdout = defined('STDOUT') && defined('STDERR') && $this->stderr === STDERR ? STDOUT : fopen('php://output', 'wb');
+		return new StreamOutput($stdout, $this->stderr);
+	}
+
+	private function mountResources(string $type, CustomisationManagerInterface $manager, string $board, string $source, bool $copy, bool $recursive, bool $allowExternal): int
+	{
+		$result = (new CustomisationMountService($this->project))->mount($manager, $board, $source, $copy, $recursive, $allowExternal);
+
+		if ($result['recursive'])
+		{
+			$this->printBulkMountResult($type, $board, $result['mounted'], $result['errors']);
+			return $result['errors'] ? 1 : 0;
+		}
+
+		$mounted = $result['mounted'][0];
+		echo "Mounted {$mounted['name']} on $board ({$mounted['mode']})\n";
+		echo "Source: {$mounted['source']}\n";
+		echo "Target: {$mounted['target']}\n";
+		return 0;
+	}
+
+	private function help(array $args = []): void
+	{
+		$command = $args[0] ?? null;
+		$commands = $this->helpCommands();
+		if ($command !== null)
+		{
+			$this->helpCommand($command, $commands);
+			return;
+		}
+
+		echo $this->style('QuickInstall CLI', '1') . "\n";
+		echo "Create disposable local phpBB boards with Docker.\n\n";
+		echo $this->style('Usage:', '1;33') . "\n";
+		echo '  ' . $this->style('qi <command> [arguments] [options]', '1;36') . "\n";
+		echo '  ' . $this->style('qi help [command]', '1;36') . "\n\n";
+		echo $this->style('Common workflow:', '1;33') . "\n";
+		echo '  ' . $this->style('qi board:create demo --phpbb 3.3 --db mariadb --port 8081 --populate development', '1;36') . "\n";
+		echo '  ' . $this->style('qi board:start demo', '1;36') . "\n\n";
+
+		foreach ($commands as $group => $items)
+		{
+			echo $this->style("$group:", '1;33') . "\n";
+			$width = max(array_map('strlen', array_keys($items)));
+			foreach ($items as $name => $help)
+			{
+				echo '  ' . $this->style(str_pad($name, $width), '1;36') . '  ' . $help['summary'] . "\n";
+			}
+			echo "\n";
+		}
+
+		echo "Run `qi help <command>` for usage and options.\n";
+		echo "Full guide: docs/sandbox-cli.md\n";
+	}
+
+	private function helpCommand(string $command, array $groups): void
+	{
+		foreach ($groups as $items)
+		{
+			if (!isset($items[$command]))
+			{
+				continue;
+			}
+
+			$help = $items[$command];
+			echo $this->style($help['title'], '1') . "\n\n";
+			echo $this->style('Usage:', '1;33') . "\n";
+			echo '  ' . $this->style("qi {$help['usage']}", '1;36') . "\n\n";
+			echo $this->style('Description:', '1;33') . "\n";
+			echo "  {$help['description']}\n";
+			if (!empty($help['arguments']))
+			{
+				echo "\n" . $this->style('Arguments:', '1;33') . "\n";
+				$this->printHelpRows($help['arguments']);
+			}
+			if (!empty($help['options']))
+			{
+				echo "\n" . $this->style('Options:', '1;33') . "\n";
+				$this->printHelpRows($help['options']);
+			}
+			if (!empty($help['examples']))
+			{
+				echo "\n" . $this->style('Examples:', '1;33') . "\n";
+				foreach ($help['examples'] as $example)
+				{
+					echo '  ' . $this->style("qi $example", '1;36') . "\n";
+				}
+			}
+			echo "\n";
+			return;
+		}
+
+		echo "Unknown command: $command\n\n";
+		$this->help();
+	}
+
+	private function printHelpRows(array $rows): void
+	{
+		$width = max(array_map('strlen', array_keys($rows)));
+		foreach ($rows as $name => $description)
+		{
+			echo '  ' . $this->style(str_pad($name, $width), '1;36') . '  ' . $description . "\n";
+		}
+	}
+
+	private function helpCommands(): array
+	{
+		return [
+			'Board commands' => [
+				'board:create' => [
+					'title' => 'board:create',
+					'usage' => 'board:create <name> [--phpbb VERSION] [--db mariadb|mysql|postgres|sqlite] [--port PORT] [--populate PRESET] [--debug] [--replace]',
+					'summary' => 'Create a board scaffold and Docker runtime.',
+					'description' => 'Creates a local board definition, downloads the requested phpBB source if needed, and prepares Docker files. Run board:start after this.',
+					'arguments' => [
+						'<name>' => 'Required board name. Use a short local name such as demo or extdev.',
+					],
+					'options' => [
+						'--phpbb VERSION' => 'phpBB selector. Examples: latest, 3.3, 3.3.17, 3.2, master. Default: latest.',
+						'--db DB' => 'Database engine. One of: mariadb, mysql, postgres, sqlite. Default: mariadb.',
+						'--port PORT' => 'Local browser port. Default: 8080.',
+						'--populate PRESET' => 'Seed preset. One of: none, tiny, development, load-test, random. Default: none.',
+						'--debug' => 'Enable phpBB debug settings after install.',
+						'--replace' => 'Destroy an existing board with the same name before creating the new one.',
+					],
+					'examples' => [
+						'board:create demo --phpbb 3.3 --db mariadb --port 8081',
+						'board:create dev --phpbb 3.3.17 --populate development --debug',
+					],
+				],
+				'board:start' => [
+					'title' => 'board:start',
+					'usage' => 'board:start <name> [--no-open]',
+					'summary' => 'Start the board containers and install the board if needed.',
+					'description' => 'Starts the board containers with Docker Compose, runs phpBB install on first start, applies the configured populate preset once, and waits for the board URL to respond. Docker must already be running.',
+					'arguments' => [
+						'<name>' => 'Required board name.',
+					],
+					'options' => [
+						'--no-open' => 'Do not open the board URL in the default browser.',
+					],
+					'examples' => [
+						'board:start demo',
+					],
+				],
+				'board:stop' => [
+					'title' => 'board:stop',
+					'usage' => 'board:stop <name>',
+					'summary' => 'Stop a running board.',
+					'description' => 'Stops the board containers without deleting board files or database files.',
+					'arguments' => [
+						'<name>' => 'Required board name.',
+					],
+					'examples' => [
+						'board:stop demo',
+					],
+				],
+				'board:destroy' => [
+					'title' => 'board:destroy',
+					'usage' => 'board:destroy <name>',
+					'summary' => 'Delete a board and its Docker image.',
+					'description' => 'Removes the board files, runtime files, database files, containers, local Docker image, and board registry entry.',
+					'arguments' => [
+						'<name>' => 'Required board name.',
+					],
+					'examples' => [
+						'board:destroy demo',
+					],
+				],
+				'board:list' => [
+					'title' => 'board:list',
+					'usage' => 'board:list',
+					'summary' => 'Show created boards and running status.',
+					'description' => 'Lists known boards with phpBB version, PHP version, database type, populate preset, debug flag, URL, and running status.',
+					'examples' => [
+						'board:list',
+					],
+				],
+				'board:seed' => [
+					'title' => 'board:seed',
+					'usage' => 'board:seed <name> --preset tiny|development|load-test|random [--seed N] [--reset|--replace]',
+					'summary' => 'Add, replace, or remove fixture content.',
+					'description' => 'Seeds repeatable phpBB development or load fixtures on an installed board. SQLite supports tiny and development presets.',
+					'arguments' => [
+						'<name>' => 'Required board name.',
+					],
+					'options' => [
+						'--preset PRESET' => 'Required fixture preset. One of: tiny, development, load-test, random.',
+						'--seed N' => 'Positive random seed number for repeatable fixture shape. Default: 1.',
+						'--replace' => 'Remove existing QuickInstall seed data, then seed again.',
+						'--reset' => 'Remove existing QuickInstall seed data without adding new data.',
+					],
+					'examples' => [
+						'board:seed demo --preset development --seed 1',
+						'board:seed demo --preset development --replace',
+					],
+				],
+			],
+			'Extension commands' => [
+				'ext:mount' => [
+					'title' => 'ext:mount',
+					'usage' => 'ext:mount <board> <path> [--copy] [--recursive] [--allow-external]',
+					'summary' => 'Mount one or more extensions into a board.',
+					'description' => 'Mounts a phpBB extension from the customisations drop zone. Running boards are refreshed automatically.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+						'<path>' => 'Extension path, or a directory to scan when --recursive is used.',
+					],
+					'options' => [
+						'--copy' => 'Copy one extension instead of bind-mounting it.',
+						'--recursive' => 'Find and bind-mount all extensions below <path>. Cannot be combined with --copy.',
+						'--allow-external' => 'Allow trusted paths outside the customisations drop zone.',
+					],
+					'examples' => [
+						'ext:mount demo customisations/vendor/extname',
+						'ext:mount demo customisations --recursive',
+					],
+				],
+				'ext:unmount' => [
+					'title' => 'ext:unmount',
+					'usage' => 'ext:unmount <board> <vendor/extension>',
+					'summary' => 'Remove a mounted extension from a board.',
+					'description' => 'Disables and purges the extension from phpBB before removing its mount or copied files. Installed boards must be running.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+						'<vendor/extension>' => 'Extension name from composer.json, such as phpbb/foo.',
+					],
+					'examples' => [
+						'ext:unmount demo vendor/extname',
+					],
+				],
+				'ext:list' => [
+					'title' => 'ext:list',
+					'usage' => 'ext:list <board>',
+					'summary' => 'Show extensions mounted on a board.',
+					'description' => 'Lists mounted extensions, mount mode, and source path for one board.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+					],
+					'examples' => [
+						'ext:list demo',
+					],
+				],
+			],
+			'Style commands' => [
+				'style:mount' => [
+					'title' => 'style:mount',
+					'usage' => 'style:mount <board> <path> [--copy] [--recursive] [--allow-external]',
+					'summary' => 'Mount one or more styles into a board.',
+					'description' => 'Mounts a phpBB style from the customisations drop zone. Running boards are refreshed automatically.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+						'<path>' => 'Style path, or a directory to scan when --recursive is used.',
+					],
+					'options' => [
+						'--copy' => 'Copy one style instead of bind-mounting it.',
+						'--recursive' => 'Find and bind-mount all styles below <path>. Cannot be combined with --copy.',
+						'--allow-external' => 'Allow trusted paths outside the customisations drop zone.',
+					],
+					'examples' => [
+						'style:mount demo customisations/stylename',
+						'style:mount demo customisations --recursive',
+					],
+				],
+				'style:unmount' => [
+					'title' => 'style:unmount',
+					'usage' => 'style:unmount <board> <style>',
+					'summary' => 'Remove a mounted style from a board.',
+					'description' => 'Uninstalls the style from phpBB before removing its mount or copied files. Installed boards must be running.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+						'<style>' => 'Style folder name.',
+					],
+					'examples' => [
+						'style:unmount demo stylename',
+					],
+				],
+				'style:list' => [
+					'title' => 'style:list',
+					'usage' => 'style:list <board>',
+					'summary' => 'Show styles mounted on a board.',
+					'description' => 'Lists mounted styles, mount mode, and source path for one board.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+					],
+					'examples' => [
+						'style:list demo',
+					],
+				],
+			],
+			'Language commands' => [
+				'lang:mount' => [
+					'title' => 'lang:mount',
+					'usage' => 'lang:mount <board> <path> [--copy] [--recursive] [--allow-external]',
+					'summary' => 'Mount one or more language packs into a board.',
+					'description' => 'Mounts a phpBB 3.x or 4.x language pack from the customisations drop zone. Running boards are refreshed automatically.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+						'<path>' => 'Language-pack path, or a directory to scan when --recursive is used.',
+					],
+					'options' => [
+						'--copy' => 'Copy one language pack instead of bind-mounting it.',
+						'--recursive' => 'Find and bind-mount all language packs below <path>. Cannot be combined with --copy.',
+						'--allow-external' => 'Allow trusted paths outside the customisations drop zone.',
+					],
+					'examples' => [
+						'lang:mount demo customisations/de',
+						'lang:mount demo customisations --recursive',
+					],
+				],
+				'lang:unmount' => [
+					'title' => 'lang:unmount',
+					'usage' => 'lang:unmount <board> <iso>',
+					'summary' => 'Remove a mounted language pack from a board.',
+					'description' => 'Uninstalls the language from phpBB before removing its mount or copied files. Installed boards must be running.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+						'<iso>' => 'Language ISO from the folder name or composer.json metadata.',
+					],
+					'examples' => [
+						'lang:unmount demo de',
+					],
+				],
+				'lang:list' => [
+					'title' => 'lang:list',
+					'usage' => 'lang:list <board>',
+					'summary' => 'Show language packs mounted on a board.',
+					'description' => 'Lists mounted language packs, mount mode, and source path for one board.',
+					'arguments' => [
+						'<board>' => 'Required board name.',
+					],
+					'examples' => [
+						'lang:list demo',
+					],
+				],
+			],
+			'UI commands' => [
+				'ui:start' => [
+					'title' => 'ui:start',
+					'usage' => 'ui:start [--host 127.0.0.1] [--port 8079] [--no-open]',
+					'summary' => 'Start the local QuickInstall Dashboard UI.',
+					'description' => 'Starts PHP built-in server in the background on a loopback address and serves the QuickInstall Dashboard UI.',
+					'options' => [
+						'--host HOST' => 'Loopback host. One of: 127.0.0.1, localhost, ::1. Default: 127.0.0.1.',
+						'--port PORT' => 'Local UI port. Default: 8079.',
+						'--no-open' => 'Do not open the Dashboard URL in the default browser.',
+					],
+					'examples' => [
+						'ui:start',
+						'ui:start --port 8088',
+					],
+				],
+				'ui:stop' => [
+					'title' => 'ui:stop',
+					'usage' => 'ui:stop',
+					'summary' => 'Stop the tracked QuickInstall Dashboard UI.',
+					'description' => 'Stops the background Dashboard UI server that was started with ui:start and removes its runtime state file.',
+					'examples' => [
+						'ui:stop',
+					],
+				],
+				'ui:restart' => [
+					'title' => 'ui:restart',
+					'usage' => 'ui:restart [--host 127.0.0.1] [--port 8079] [--no-open]',
+					'summary' => 'Restart the local QuickInstall Dashboard UI.',
+					'description' => 'Stops the tracked Dashboard UI server if present, then starts a fresh local Dashboard UI server.',
+					'options' => [
+						'--host HOST' => 'Loopback host. One of: 127.0.0.1, localhost, ::1. Default: 127.0.0.1.',
+						'--port PORT' => 'Local UI port. Default: 8079.',
+						'--no-open' => 'Do not open the Dashboard URL in the default browser.',
+					],
+					'examples' => [
+						'ui:restart',
+					],
+				],
+				'ui:status' => [
+					'title' => 'ui:status',
+					'usage' => 'ui:status',
+					'summary' => 'Show whether the QuickInstall Dashboard UI is running.',
+					'description' => 'Reads the tracked UI runtime state and checks whether the configured local UI port responds.',
+					'examples' => [
+						'ui:status',
+					],
+				],
+			],
+			'Source commands' => [
+				'source:fetch' => [
+					'title' => 'source:fetch',
+					'usage' => 'source:fetch <version|branch> [--git] [--url URL] [--allow-external]',
+					'summary' => 'Register and download a phpBB source.',
+					'description' => 'Registers and downloads a source under .qi/sources. Normal board:create flows fetch automatically when needed. Prefer exact tags such as 3.3.17; convenience selectors such as 3.3, 3.3.x, latest, and master are stored under the exact phpBB version that was resolved.',
+					'arguments' => [
+						'<version|branch>' => 'Version selector or source name, such as 3.3.17 or master.',
+					],
+					'options' => [
+						'--git' => 'Fetch a Git source instead of a Composer release source.',
+						'--url URL' => 'Git repository URL. Defaults to the official phpBB repository for Git sources.',
+						'--allow-external' => 'Allow a trusted non-phpBB Git URL.',
+					],
+					'examples' => [
+						'source:fetch 3.3.17',
+						'source:fetch master --git --url https://github.com/phpbb/phpbb.git',
+					],
+				],
+				'source:list' => [
+					'title' => 'source:list',
+					'usage' => 'source:list',
+					'summary' => 'Show registered and downloaded sources.',
+					'description' => 'Lists sources, download status, paths, and boards currently using each source.',
+					'examples' => [
+						'source:list',
+					],
+				],
+				'source:remove' => [
+					'title' => 'source:remove',
+					'usage' => 'source:remove <version|source> [--force]',
+					'summary' => 'Delete one source.',
+					'description' => 'Deletes one source from .qi/sources and removes it from the source registry.',
+					'arguments' => [
+						'<version|source>' => 'Registered source selector.',
+					],
+					'options' => [
+						'--force' => 'Remove even if existing boards reference the source.',
+					],
+					'examples' => [
+						'source:remove 3.3.17',
+					],
+				],
+				'source:prune' => [
+					'title' => 'source:prune',
+					'usage' => 'source:prune',
+					'summary' => 'Delete unused sources.',
+					'description' => 'Removes all downloaded sources that are not referenced by existing boards.',
+					'examples' => [
+						'source:prune',
+					],
+				],
+				'phpbb:list' => [
+					'title' => 'phpbb:list',
+					'usage' => 'phpbb:list',
+					'summary' => 'Show supported phpBB selectors.',
+					'description' => 'Lists supported phpBB version selectors, PHP compatibility, and resolution notes.',
+					'examples' => [
+						'phpbb:list',
+					],
+				],
+			],
+			'Workspace commands' => [
+				'init' => [
+					'title' => 'init',
+					'usage' => 'init',
+					'summary' => 'Create the .qi workspace folders.',
+					'description' => 'Initializes QuickInstall local state folders. Other commands also initialize the workspace when needed.',
+					'examples' => [
+						'init',
+					],
+				],
+				'doctor' => [
+					'title' => 'doctor',
+					'usage' => 'doctor',
+					'summary' => 'Check local PHP, Docker, Git, and Composer requirements.',
+					'description' => 'Checks that required host tools are available, Docker Desktop is running, Docker Compose works, and Docker is using Linux containers.',
+					'examples' => [
+						'doctor',
+					],
+				],
+			],
+		];
+	}
+}

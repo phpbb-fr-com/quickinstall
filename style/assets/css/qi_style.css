@@ -1,0 +1,213 @@
+:root {
+	--darkside-color: hsl(0, 0%, 70%);
+	--darkside-color-dim: hsl(0, 0%, 50%);
+	--darkside-bg-color: hsl(219, 20%, 20%);
+	--darkside-bg-hilight: hsla(0, 0%, 100%, 0.12);
+	--night-bg-color: hsl(216, 28%, 7%);
+	--night-color: hsl(210, 17%, 82%);
+	--night-color-muted: hsl(212, 9%, 58%);
+	/* SVG color filters https://codepen.io/sosuke/pen/Pjoqqp */
+	--svg-filter-e1e1e1: brightness(0) saturate(100%) invert(74%) sepia(97%) saturate(1%) hue-rotate(315deg) brightness(98%) contrast(103%);
+	--svg-filter-009bdf: brightness(0) saturate(100%) invert(46%) sepia(52%) saturate(3716%) hue-rotate(170deg) brightness(96%) contrast(101%);
+	--svg-filter-fafafa: brightness(0) saturate(100%) invert(100%) sepia(5%) saturate(23%) hue-rotate(84deg) brightness(104%) contrast(96%);
+}
+
+.phpbb-logo-nb {
+	background-image: url("../img/logo_small_white.svg");
+	background-repeat: no-repeat;
+	padding: 0.125rem 3rem;
+	margin-left: 0.5rem;
+	filter: var(--svg-filter-009bdf);
+}
+
+.navbar-light .navbar-toggler-icon-qi-boards {
+	background-image: url("data:image/svg+xml,<svg viewBox='0 0 16 16' fill='rgba%280, 0, 0, 0.55%29' xmlns='http://www.w3.org/2000/svg'><path d='M2.5 3.5a.5.5 0 010-1h11a.5.5 0 010 1h-11zm2-2a.5.5 0 010-1h7a.5.5 0 010 1h-7zM0 13a1.5 1.5 0 001.5 1.5h13A1.5 1.5 0 0016 13V6a1.5 1.5 0 00-1.5-1.5h-13A1.5 1.5 0 000 6v7zm1.5.5A.5.5 0 011 13V6a.5.5 0 01.5-.5h13a.5.5 0 01.5.5v7a.5.5 0 01-.5.5h-13z'/></svg>");
+}
+
+/* workaround to reposition anchor links under navbar */
+.anchor {
+	margin-top: -4rem;
+	padding-top: 4rem;
+}
+
+/* sidebar styling */
+.sidebar {
+	top: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 1000;
+	overflow-y: scroll; /* Scrollable contents if viewport is shorter than content. */
+	min-width: 185px;
+	background-color: var(--darkside-bg-color);
+	color: var(--darkside-color);
+}
+
+.sidebar a {
+	color: var(--darkside-color);
+}
+
+.sidebar .nav-link {
+	padding: .2rem 1rem .2rem .5rem;
+}
+
+.sidebar .nav-link.active {
+	background-color: var(--darkside-bg-hilight);
+	border-radius: .25rem;
+}
+
+.sidebar .nav-link svg.bi {
+	line-height: 1.5rem;
+	color: var(--darkside-color-dim);
+}
+
+.sidebar .nav-link:hover,
+.sidebar .nav-link:hover svg.bi,
+.sidebar .nav-link.active svg.bi {
+	color: inherit;
+}
+
+.sidebar .list-group-item,
+.sidebar .border-bottom,
+.sidebar .border-top {
+	border-color: var(--darkside-bg-hilight) !important; /* !important to override bootstrap's !important */
+}
+
+.sidebar .badge {
+	background-color: var(--darkside-bg-hilight);
+	color: var(--darkside-color);
+}
+
+.badge {
+	line-height: 1em;
+}
+
+svg.bi {
+	vertical-align: -.125em;
+}
+
+#about-readme pre,
+#about-cli pre {
+	background-color: #f5f7fa;
+	border: 1px solid rgba(0, 0, 0, 0.08);
+	border-radius: .375rem;
+	color: #29303d;
+	font-size: .875rem;
+	line-height: 1.55;
+	margin: 1rem 0;
+	padding: .875rem 1rem;
+	position: relative;
+}
+
+#about-readme pre.codeblock-bash,
+#about-readme pre.codeblock-powershell,
+#about-readme pre.codeblock-batch,
+#about-cli pre.codeblock-bash,
+#about-cli pre.codeblock-powershell,
+#about-cli pre.codeblock-batch {
+	background-color: #1f2933;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	color: #d7e1ea;
+	padding: 1rem 1.25rem;
+}
+
+#about-readme pre code,
+#about-cli pre code {
+	color: inherit;
+	font-size: inherit;
+	white-space: pre;
+	word-break: normal;
+	word-wrap: normal;
+}
+
+#about-readme pre code::selection,
+#about-cli pre code::selection {
+	background-color: rgba(0, 155, 223, 0.35);
+}
+
+.qi-code-copy {
+	align-items: center;
+	display: flex;
+	height: 2rem;
+	justify-content: center;
+	opacity: 0;
+	padding: 0;
+	position: absolute;
+	right: .5rem;
+	top: .5rem;
+	transition: opacity .15s ease-in-out;
+	width: 2rem;
+	z-index: 2;
+}
+
+#about-readme pre:hover .qi-code-copy,
+#about-readme pre:focus-within .qi-code-copy,
+#about-cli pre:hover .qi-code-copy,
+#about-cli pre:focus-within .qi-code-copy {
+	opacity: .9;
+}
+
+.qi-code-copy:focus,
+.qi-code-copy:hover,
+.qi-code-copy.is-copied {
+	opacity: 1;
+}
+
+.qi-code-copy.is-copied {
+	color: #198754;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+	body,
+	body.bg-secondary,
+	.navbar,
+	.navbar.bg-secondary {
+		background-color: var(--night-bg-color) !important; /* !important to override bootstrap's !important */
+		color: var(--night-color) !important; /* !important to override bootstrap's !important */
+	}
+
+	.text-muted {
+		color: var(--night-color-muted) !important; /* !important to override bootstrap's !important */
+	}
+
+	.callout-primary { border-left-color: #375a7f; }
+	.callout-info { border-left-color: #17a2b8; }
+	.callout-warning { border-left-color: #f39c12; }
+	.callout-danger { border-left-color: #e74c3c; }
+
+	#about-readme pre,
+	#about-cli pre {
+		background-color: #161d26;
+		border-color: rgba(255, 255, 255, 0.12);
+		color: var(--night-color);
+	}
+
+	#about-readme pre.codeblock-bash,
+	#about-readme pre.codeblock-powershell,
+	#about-readme pre.codeblock-batch,
+	#about-cli pre.codeblock-bash,
+	#about-cli pre.codeblock-powershell,
+	#about-cli pre.codeblock-batch {
+		background-color: #0c1117;
+		color: #d7e1ea;
+	}
+
+	.phpbb-logo-rm {
+		filter: var(--svg-filter-e1e1e1);
+	}
+
+	.navbar-brand {
+		filter: var(--svg-filter-fafafa);
+	}
+
+	.navbar-light .navbar-toggler-icon-qi-boards {
+		background-image: url("data:image/svg+xml,<svg viewBox='0 0 16 16' fill='rgba%28250, 250, 250, 0.55%29' xmlns='http://www.w3.org/2000/svg'><path d='M2.5 3.5a.5.5 0 010-1h11a.5.5 0 010 1h-11zm2-2a.5.5 0 010-1h7a.5.5 0 010 1h-7zM0 13a1.5 1.5 0 001.5 1.5h13A1.5 1.5 0 0016 13V6a1.5 1.5 0 00-1.5-1.5h-13A1.5 1.5 0 000 6v7zm1.5.5A.5.5 0 011 13V6a.5.5 0 01.5-.5h13a.5.5 0 01.5.5v7a.5.5 0 01-.5.5h-13z'/></svg>");
+	}
+}
+
+@media (max-width: 767.98px) {
+	.sidebar {
+		top: 3.7rem;
+	}
+}

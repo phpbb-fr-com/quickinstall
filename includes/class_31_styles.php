@@ -19,15 +19,11 @@ class class_31_styles extends acp_styles
 {
 	private $qi_styles = array();
 
-	private $qi_default_style = '';
+	private $qi_default_style;
 
-	/**
-	 * @param int $install_styles. 1 = all styles, 2 only subsilver2.
-	 */
-	public function __construct($install_styles)
+	public function __construct()
 	{
-		global $db, $user, $phpbb_admin_path, $phpbb_root_path, $phpEx, $template, $request, $cache, $auth, $config;
-		global $settings;
+		global $db, $user, $phpbb_root_path, $phpEx, $template, $request, $cache, $auth, $config, $settings;
 
 		$this->mode = 'install';
 		$this->db = $db;
@@ -40,9 +36,7 @@ class class_31_styles extends acp_styles
 		$this->phpbb_root_path = $phpbb_root_path;
 		$this->php_ext = $phpEx;
 		$this->styles_path = $this->phpbb_root_path . $this->styles_path_absolute . '/';
-		$this->subsilver_default = $subsilver_default;
 
-		$subsilver_only			= ($install_styles == 2) ? true : false;
 		$this->qi_default_style	= $settings->get_config('default_style', '');
 
 		// Get a array with installed styles.
@@ -55,33 +49,11 @@ class class_31_styles extends acp_styles
 		// And merge them into one array.
 		$style_ary = array_merge($installed, $available);
 
-		if ($subsilver_only)
+		// Set styles as active and put their name as key.
+		foreach ($style_ary as $style)
 		{
-			// Find subsilver2
-			foreach ($style_ary as $style)
-			{
-				if ($style['style_name'] == 'subsilver2')
-				{
-					$style['style_active'] = 1;
-					$id = $this->install_style($style);
-
-					if ($subsilver_default)
-					{
-						$this->qi_set_default($id);
-					}
-
-					return;
-				}
-			}
-		}
-		else
-		{
-			// Set styles as active and put their name as key.
-			foreach ($style_ary as $style)
-			{
-				$style['style_active'] = 1;
-				$this->qi_styles[$style['style_name']] = $style;
-			}
+			$style['style_active'] = 1;
+			$this->qi_styles[$style['style_name']] = $style;
 		}
 
 		unset($style_ary);
@@ -103,7 +75,8 @@ class class_31_styles extends acp_styles
 			// We don't have the parent skip this.
 			return;
 		}
-		else if (!empty($style['_inherit_name']) && empty($this->qi_styles[$style['_inherit_name']]['style_id']))
+
+		if (!empty($style['_inherit_name']) && empty($this->qi_styles[$style['_inherit_name']]['style_id']))
 		{
 			// Need to install the parent first.
 			$this->qi_install_style($this->qi_styles[$style['_inherit_name']]);
@@ -127,12 +100,12 @@ class class_31_styles extends acp_styles
 
 	private function qi_set_default($id)
 	{
-		set_config('default_style', $id);
+		qi_set_config('default_style', $id);
 
 		// Set it for guests and the admin too.
-		$sql = 'UPDATE ' . USERS_TABLE . "
-			SET user_style = $id
-			WHERE user_id = 1 or user_id = 2";
+		$sql = 'UPDATE ' . USERS_TABLE . '
+			SET user_style = ' . (int) $id . '
+			WHERE user_id = 1 or user_id = 2';
 		$this->db->sql_query($sql);
 	}
 }

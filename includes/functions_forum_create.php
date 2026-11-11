@@ -24,13 +24,11 @@ if (!defined('IN_QUICKINSTALL'))
  *
  * Copied from adm/index.php, since we do not want to include that file.
  *
- * param mixed $value_ary An array of the form array(array('lang' => ..., 'value' => ..., 'column_type' =>))'
- * param mixed $error The error array
+ * @param mixed $value_ary An array of the form array(array('lang' => ..., 'value' => ..., 'column_type' =>))'
+ * @param mixed $error The error array
  */
 function validate_range($value_ary, &$error)
 {
-	global $user;
-
 	$column_types = array(
 		'BOOL'	=> array('php_type' => 'int', 		'min' => 0, 				'max' => 1),
 		'USINT'	=> array('php_type' => 'int',		'min' => 0, 				'max' => 65535),
@@ -43,16 +41,12 @@ function validate_range($value_ary, &$error)
 	foreach ($value_ary as $value)
 	{
 		$column = explode(':', $value['column_type']);
-		$max = $min = 0;
-		$type = 0;
 		if (!isset($column_types[$column[0]]))
 		{
 			continue;
 		}
-		else
-		{
-			$type = $column_types[$column[0]];
-		}
+
+		$type = $column_types[$column[0]];
 
 		switch ($type['php_type'])
 		{
@@ -60,7 +54,7 @@ function validate_range($value_ary, &$error)
 				$max = (isset($column[1])) ? min($column[1],$type['max']) : $type['max'];
 				if (strlen($value['value']) > $max)
 				{
-					$error[] = sprintf($user->lang['SETTING_TOO_LONG'], $user->lang[$value['lang']], $max);
+					$error[] = qi::lang('SETTING_TOO_LONG', qi::lang($value['lang']), $max);
 				}
 			break;
 
@@ -69,11 +63,11 @@ function validate_range($value_ary, &$error)
 				$max = (isset($column[2])) ? min($column[2],$type['max']) : $type['max'];
 				if ($value['value'] < $min)
 				{
-					$error[] = sprintf($user->lang['SETTING_TOO_LOW'], $user->lang[$value['lang']], $min);
+					$error[] = qi::lang('SETTING_TOO_LOW', qi::lang($value['lang']), $min);
 				}
 				else if ($value['value'] > $max)
 				{
-					$error[] = sprintf($user->lang['SETTING_TOO_BIG'], $user->lang[$value['lang']], $max);
+					$error[] = qi::lang('SETTING_TOO_BIG', qi::lang($value['lang']), $max);
 				}
 			break;
 		}

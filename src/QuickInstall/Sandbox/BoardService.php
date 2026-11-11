@@ -1,0 +1,361 @@
+<?php
+/**
+ *
+ * QuickInstall CLI
+ *
+ * @copyright (c) 2026 phpBB Limited <https://www.phpbb.com>
+ * @license       GNU General Public License, version 2 (GPL-2.0)
+ *
+ */
+
+namespace QuickInstall\Sandbox;
+
+use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
+
+/** Owns board definitions and coordinates source, runtime, and Docker services. */
+class BoardService
+{
+	private Project $project;
+	private ?Output $output;
+
+	public function __construct(Project $project, ?Output $output = null)
+	{
+		$this->project = $project;
+		$this->output = $output;
+	}
+
+	/**
+	 * Creates a board definition and runtime scaffold without starting Docker.
+	 * Existing state is restored if a replacement fails.
+	 */
+	public function create(string $name, string $version = 'latest', string $db = 'mariadb', int $port = 8080, string $populate = 'none', bool $debug = false, bool $replace = false): array
+	{
+		$this->project->init();
+		$this->project->assertName($name, 'board');
+		$selection = $this->resolveSourceSelection($version);
+		$boards = $this->project->boards();
+		$existingName = null;
+		foreach (array_keys($boards) as $registeredName)
+		{
+			if ($this->project->namesEqual((string) $registeredName, $name))
+			{
+				$existingName = (string) $registeredName;
+				break;
+			}
+		}
+		if ($existingName !== null)
+		{
+			if ($existingName !== $name)
+			{
+				throw new InvalidArgumentException("Board already exists: $existingName. Board names are case-insensitive.");
+			}
+			if (!$replace)
+			{
+				throw new InvalidArgumentException("Board already exists: $name. Use board:destroy first, or pass --replace to recreate it.");
+			}
+		}
+
+		foreach ($this->project->boards() as $board)
+		{
+			if (!$this->project->namesEqual((string) ($board['name'] ?? ''), $name) && (int) ($board['port'] ?? 0) === $port)
+			{
+				throw new InvalidArgumentException("Port $port is already used by board: {$board['name']}");
+			}
+		}
+
+		$reusingOwnPort = $existingName !== null && (int) ($boards[$existingName]['port'] ?? 0) === $port;
+		if (!$reusingOwnPort && $this->isPortInUse($port))
+		{
+			throw new InvalidArgumentException("Port $port is already in use on this host.");
+		}
+
+		// Resolve and fetch first; a failed download must not disturb a board
+		// that is being replaced.
+		$source = $this->createSourceProvider()->ensure($version);
+		$php = $source['php'] ?? $selection['php'] ?? null;
+		if ($php === null || $php === '')
+		{
+			throw new RuntimeException("Unable to determine PHP runtime for source: {$source['source_key']}");
+		}
+		$config = [
+			'phpbb' => $source['version'],
+			'phpbb_source' => $source['source_key'],
+			'php' => $php,
+			'db' => $db,
+			'port' => $port,
+			'server_name' => 'localhost',
+			'script_path' => '/' . $name,
+			'cookie_path' => '/' . $name . '/',
+			'scoped_path' => true,
+			'postgres_data_subdir' => $db === 'postgres',
+			'populate' => $populate,
+			'debug' => $debug,
+			'admin_name' => 'admin',
+			'admin_pass' => 'password',
+			'admin_email' => 'admin@example.test',
+			'board_email' => 'board@example.test',
+			'board_timezone' => $this->hostTimezone(),
+			'extensions' => [],
+			'styles' => [],
+			'languages' => [],
+		];
+		$backups = [];
+		if ($existingName !== null)
+		{
+			// Rename existing state aside so any later failure can restore it.
+			$this->createBoardRunner()->prepareReplacement($name);
+			$backups = $this->backupBoardState($name);
+		}
+
+		$boardDir = $this->project->boardPath($name);
+		try
+		{
+			if (!is_dir($boardDir) && !mkdir($boardDir, 0775, true) && !is_dir($boardDir))
+			{
+				throw new RuntimeException("Unable to create board directory: $boardDir");
+			}
+
+			$paths = $this->createDockerComposeWriter()->write($name, $config);
+			$board = [
+				'name' => $name,
+				'phpbb' => $source['version'],
+				'phpbb_source' => $source['source_key'],
+				'phpbb_branch' => $source['phpbb_branch'],
+				'php' => $php,
+				'db' => $db,
+				'port' => $port,
+				'server_name' => $config['server_name'],
+				'script_path' => $config['script_path'],
+				'cookie_path' => $config['cookie_path'],
+				'scoped_path' => $config['scoped_path'],
+				'postgres_data_subdir' => $config['postgres_data_subdir'],
+				'url' => "http://localhost:$port/$name/",
+				'health_url' => "http://127.0.0.1:$port/$name/",
+				'path' => $boardDir,
+				'populate' => $populate,
+				'debug' => $debug,
+				'board_timezone' => $config['board_timezone'],
+				'extensions' => [],
+				'styles' => [],
+				'languages' => [],
+				'created_at' => gmdate('c'),
+			];
+
+			$this->project->appendBoard($board);
+		}
+		catch (Throwable $e)
+		{
+			$this->restoreBoardState($backups);
+			throw $e;
+		}
+
+		$this->discardBoardBackups($backups);
+
+		return ['board' => $board, 'paths' => $paths];
+	}
+
+	/** Returns the host's PHP-supported timezone identifier, falling back to UTC. */
+	protected function hostTimezone(): string
+	{
+		$candidates = [];
+		$environment = getenv('TZ');
+		if (is_string($environment))
+		{
+			$candidates[] = ltrim(trim($environment), ':');
+		}
+
+		$localtime = realpath('/etc/localtime');
+		if (is_string($localtime) && preg_match('#/zoneinfo/(.+)$#', $localtime, $match))
+		{
+			$candidates[] = $match[1];
+		}
+
+		if (is_readable('/etc/timezone'))
+		{
+			$timezone = file_get_contents('/etc/timezone');
+			if (is_string($timezone))
+			{
+				$candidates[] = trim($timezone);
+			}
+		}
+
+		$candidates[] = date_default_timezone_get();
+		foreach ($candidates as $candidate)
+		{
+			if ($candidate === '')
+			{
+				continue;
+			}
+
+			try
+			{
+				// Match phpBB's own timezone validation semantics.
+				new \DateTimeZone($candidate);
+				return $candidate;
+			}
+			catch (\Exception $e)
+			{
+			}
+		}
+
+		return 'UTC';
+	}
+
+	private function backupBoardState(string $name): array
+	{
+		$token = str_replace('.', '', uniqid('replace-', true));
+		$backups = [];
+		foreach ([$this->project->boardPath($name), $this->project->runtimePath($name), $this->project->dbPath($name)] as $path)
+		{
+			$backups[$path] = null;
+			if (!file_exists($path) && !is_link($path))
+			{
+				continue;
+			}
+
+			$backup = $path . '.' . $token;
+			if (!@rename($path, $backup))
+			{
+				$this->restoreBoardState(array_filter($backups, 'is_string'));
+				throw new RuntimeException("Unable to preserve existing board during replacement: $path");
+			}
+			$backups[$path] = $backup;
+		}
+
+		return $backups;
+	}
+
+	private function restoreBoardState(array $backups): void
+	{
+		foreach ($backups as $path => $backup)
+		{
+			if (file_exists($path) || is_link($path))
+			{
+				$this->project->deleteTree($path);
+			}
+			if (is_string($backup) && (file_exists($backup) || is_link($backup)) && !@rename($backup, $path))
+			{
+				throw new RuntimeException("Unable to restore board after failed replacement: $path");
+			}
+		}
+	}
+
+	private function discardBoardBackups(array $backups): void
+	{
+		foreach ($backups as $backup)
+		{
+			if (!is_string($backup))
+			{
+				continue;
+			}
+			try
+			{
+				$this->project->deleteTree($backup);
+			}
+			catch (RuntimeException $e)
+			{
+				if ($this->output !== null)
+				{
+					$this->output->error("Warning: unable to remove replacement backup $backup: {$e->getMessage()}\n");
+				}
+			}
+		}
+	}
+
+	private function resolveSourceSelection(string $version): array
+	{
+		try
+		{
+			return (new VersionMatrix())->resolve($version);
+		}
+		catch (InvalidArgumentException $e)
+		{
+			$sources = $this->project->readJson('sources.json', []);
+			if (!isset($sources[$version]))
+			{
+				throw $e;
+			}
+
+			return $sources[$version];
+		}
+	}
+
+	protected function isPortInUse(int $port): bool
+	{
+		$socket = @stream_socket_server("tcp://127.0.0.1:$port", $errno, $errstr);
+		if ($socket === false)
+		{
+			return true;
+		}
+
+		fclose($socket);
+		return false;
+	}
+
+	public function list(): array
+	{
+		$runner = $this->createBoardRunner();
+		$boards = [];
+		foreach ($this->project->boards() as $board)
+		{
+			$board['status'] = $runner->status($board['name']);
+			$board['populate'] = $board['populate'] ?? 'none';
+			$board['debug'] = $board['debug'] ?? false;
+			$boards[] = $board;
+		}
+
+		return $boards;
+	}
+
+	public function start(string $name): array
+	{
+		$this->createBoardRunner()->start($name);
+		return $this->project->board($name);
+	}
+
+	public function stop(string $name): void
+	{
+		$this->createBoardRunner()->stop($name);
+	}
+
+	public function destroy(string $name): void
+	{
+		$this->createBoardRunner()->destroy($name);
+	}
+
+	public function seed(string $name, string $preset, int $seed, string $action): void
+	{
+		$board = $this->project->board($name);
+		if (($board['db'] ?? '') === 'sqlite'
+			&& $action !== 'reset'
+			&& !SeedPresetCatalog::supportsSqliteSeed($preset))
+		{
+			throw new InvalidArgumentException('SQLite boards support tiny and development fixture presets only. Use --reset to remove seed data, or use mariadb, mysql, or postgres for heavier presets.');
+		}
+
+		$runner = $this->createBoardRunner();
+		if ($runner->status($name) !== 'running')
+		{
+			throw new RuntimeException('Board must be running before seeding. Start it first.');
+		}
+
+		$runner->seed($name, $preset, $seed, $action);
+	}
+
+	protected function createBoardRunner(): BoardRunner
+	{
+		return new BoardRunner($this->project, $this->output);
+	}
+
+	protected function createSourceProvider(): SourceProvider
+	{
+		return new SourceProvider($this->project, $this->output);
+	}
+
+	protected function createDockerComposeWriter(): DockerComposeWriter
+	{
+		return new DockerComposeWriter($this->project);
+	}
+}

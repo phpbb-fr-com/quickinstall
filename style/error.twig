@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- The page supports both light and dark color schemes, with light being default -->
+	<meta name="color-scheme" content="light dark">
+	<!-- Defines them color of browser interface, if supported -->
+	<meta name="theme-color" content="#29303D">
+	<link rel="preconnect" href="https://fonts.gstatic.com">
+	<link href="https://fonts.googleapis.com/css2?family=Open+Sans&display=auto" rel="stylesheet">
+	<!-- Bootstrap CSS -->
+	<link href="{{ QI_ROOT_PATH }}style/assets/css/qi_bootstrap.min.css?v={{ QI_VERSION }}" rel="stylesheet" media="screen">
+	<!-- Bootstrap-Dark Variant CSS (the media attribute is for dark auto-switching) -->
+	<link href="{{ QI_ROOT_PATH }}style/assets/css/bootstrap-nightfall.min.css?v={{ QI_VERSION }}" rel="stylesheet" media="(prefers-color-scheme: dark)">
+	<link href="{{ QI_ROOT_PATH }}style/assets/css/qi_style.css?v={{ QI_VERSION }}" rel="stylesheet" media="screen">
+	<title>{{ ERROR_MSG_TITLE }}</title>
+</head>
+<body class="bg-secondary">
+<div class="container-fluid">
+	{% include 'navbar.twig' with {'S_ERROR': true} %}
+	<div id="main" class="px-5">
+		<h1>{{ ERROR_MSG_TITLE }}</h1>
+		<div class="card mb-3">
+			<div class="card-body">
+				<div>{{ ERROR_MSG_TEXT }}</div>
+			</div>
+		</div>
+	</div>
+	<footer class="text-center py-3">
+		<p class="mb-0"><small>{{ lang('PHPBB_QI_FULLLINK', QI_VERSION) }}</small></p>
+		<p class="mb-0"><small>{{ lang('POWERED_BY_PHPBB') }}</small></p>
+	</footer>
+</div>
+<script src="{{ QI_ROOT_PATH }}style/assets/js/bootstrap.min.js?v={{ QI_VERSION }}"></script>
+<script src="{{ QI_ROOT_PATH }}style/assets/js/scripts.js?v={{ QI_VERSION }}"></script>
+</body>
+</html>

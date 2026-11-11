@@ -8,34 +8,15 @@
 */
 
 /**
-* @ignore
-*/
-if (!defined('IN_QUICKINSTALL'))
-{
-	exit;
-}
-
-/**
  * qi_main module
  */
 class qi_main
 {
-	public function __construct()
+	public function run()
 	{
-		global $db, $template, $user, $settings;
-		global $quickinstall_path, $phpbb_root_path, $phpEx, $config;
+		global $template, $settings;
 
 		get_installed_boards();
-
-		$profiles = $settings->get_profiles();
-
-		// Some error?
-		if ($settings->get_config('error', 0))
-		{
-			$error_msg = $settings->get_config('error_msg', '', true);
-			$error_msg = htmlspecialchars_decode($error_msg);
-			$template->assign_var('ERROR_MSG', $error_msg);
-		}
 
 		// Assign index specific vars
 		$template->assign_vars(array(
@@ -43,33 +24,31 @@ class qi_main
 			'U_CHOOSE_PROFILE'	=> qi::url('main', array('mode' => 'change_profile')),
 
 			'TABLE_PREFIX'		=> $settings->get_config('table_prefix', ''),
-			'DB_PERFIX'			=> htmlspecialchars($settings->get_config('db_prefix', '')),
+			'DB_PREFIX'			=> $settings->get_config('db_prefix', ''),
 			'SITE_NAME'			=> $settings->get_config('site_name', ''),
 			'SITE_DESC'			=> $settings->get_config('site_desc', ''),
-			'PROFILE_COUNT'		=> $profiles['count'],
-			'PROFILE_OPTIONS'	=> $profiles['options'],
+			'PROFILES'			=> $settings->get_profiles(),
 			'DBNAME'			=> $settings->get_config('dbname', ''),
 			'INSTALL_STYLES'	=> $settings->get_config('install_styles', 0),
 			'DEFAULT_STYLE'		=> $settings->get_config('default_style', ''),
 
-			'S_ERROR'		=> $settings->get_config('error', 0),
-			'ERROR_TITLE'	=> $settings->get_config('error_title', ''),
-
-			'S_AUTOMOD'		=> $settings->get_config('automod', 0),
 			'S_DELETE_FILES'=> $settings->get_config('delete_files', 0),
+			'S_DEBUG'		=> $settings->get_config('debug', 0),
 			'S_DROP_DB'		=> $settings->get_config('drop_db', 0),
 			'S_MAKE_WRITABLE'	=> $settings->get_config('make_writable', 0),
 			'S_POPULATE'	=> $settings->get_config('populate', 0),
 			'S_REDIRECT'	=> $settings->get_config('redirect', 0),
 
-			'S_ADMIN_NAME'	=> $settings->get_config('admin_name', false),
-			'S_ADMIN_PASS'	=> $settings->get_config('admin_pass', false),
+			'ADMIN_NAME'	=> $settings->get_config('admin_name', ''),
+			'ADMIN_PASS'	=> $settings->get_config('admin_pass', ''),
 			'S_DBPASSWD'	=> $settings->get_config('dbpasswd', false),
 			'S_NODBPASSWD'	=> $settings->get_config('no_dbpasswd', false),
 			'S_DBUSER'		=> $settings->get_config('dbuser', false),
-			'S_MAIN'		=> true,
+			'S_BOARDS'		=> true,
 
-			'ALT_ENV'		=> get_alternative_env($settings->get_config('alt_env')),
+			'ALT_ENV'		=> get_alternative_env($settings->get_config('alt_env', '')),
+
+			'PHPBB_VERSION'	=> qi_get_phpbb_version(),
 
 			// Chunk settings
 			'CHUNK_POST'	=> $settings->get_config('chunk_post', 0),
@@ -89,16 +68,12 @@ class qi_main
 			'NUM_REPLIES_MAX'	=> $settings->get_config('num_replies_max', 0),
 			'EMAIL_DOMAIN'		=> $settings->get_config('email_domain', ''),
 			'GRANT_PERMISSIONS'	=> $settings->get_config('grant_permissions', ''),
-			'OTHER_CONFIG'		=> $settings->get_other_config(),
+			'OTHER_CONFIG'		=> $settings->get_config('other_config', ''),
 		));
 
 		// Output page
-		qi::page_header($user->lang['QI_MANAGE'], $user->lang['QI_MANAGE_ABOUT']);
+		qi::page_header('BOARDS');
 
-		$template->set_filenames(array(
-			'body' => 'main_body.html')
-		);
-
-		qi::page_footer();
+		qi::page_display('main_body');
 	}
 }

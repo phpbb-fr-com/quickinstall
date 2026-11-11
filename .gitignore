@@ -1,10 +1,24 @@
-purge_cache
-qi_config.cfg
-boards/*
-settings/*
-cache/*.php
-sources/automod/*
-sources/extra/*
-sources/phpBB3_alt/*
-sources/phpBB3
+# Runtime data
+/boards/
+/cache/
+/customisations/
+/settings/
+/sources/
+/.qi/
+
+# Dependencies and build output
+/vendor/
+/tests/vendor/
+/node_modules/
+/build/
+
+# Local development tooling
+/.idea/
+/.agents/
+/agent/
+/AGENTS.md
+/skills-lock.json
+
+# OS and editor files
+.DS_Store
 *~

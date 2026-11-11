@@ -1,0 +1,554 @@
+const dashboard = document.getElementById('dashboard');
+const busy = document.getElementById('busy');
+const pendingActions = new Map();
+const activityEntries = [];
+const maxActivityEntries = 50;
+const expandedBoards = new Set();
+let boardFilter = '';
+let nextActionId = 1;
+
+function updateProcessingState() {
+	const active = pendingActions.size > 0;
+	busy.classList.toggle('is-active', active);
+	document.documentElement.classList.toggle('is-processing', active);
+}
+
+function sameForm(left, right) {
+	return left.formKey === right.formKey;
+}
+
+/** Captures a stable board or section header before dashboard markup changes. */
+function snapshotViewport(context) {
+	let kind = 'status';
+	let anchor = null;
+	if (context.board) {
+		anchor = boardHeader(context.board);
+		kind = 'board';
+	}
+	if (!anchor && context.section) {
+		const section = document.getElementById(context.section);
+		anchor = section ? section.querySelector('.section-head') : null;
+		kind = 'section';
+	}
+	if (!anchor) {
+		anchor = dashboard.querySelector('.status-strip');
+		kind = 'status';
+	}
+
+	return {
+		kind,
+		top: anchor ? anchor.getBoundingClientRect().top : null,
+		scrollY: window.scrollY,
+	};
+}
+
+/** Keeps the same stable header at the same viewport position after replacement. */
+function restoreViewport(context, snapshot) {
+	let anchor = null;
+	if (snapshot.kind === 'board') {
+		anchor = boardHeader(context.board);
+	} else if (snapshot.kind === 'section') {
+		const section = document.getElementById(context.section);
+		anchor = section ? section.querySelector('.section-head') : null;
+	} else {
+		anchor = dashboard.querySelector('.status-strip');
+	}
+
+	let target = snapshot.scrollY;
+	if (anchor && snapshot.top !== null) {
+		target = window.scrollY + anchor.getBoundingClientRect().top - snapshot.top;
+	}
+
+	const previousBehavior = document.documentElement.style.scrollBehavior;
+	document.documentElement.style.scrollBehavior = 'auto';
+	window.scrollTo(0, Math.max(0, target));
+	document.documentElement.style.scrollBehavior = previousBehavior;
+}
+
+function filterBoards(manager, query) {
+	const normalized = query.trim().toLocaleLowerCase();
+	const rows = Array.from(manager.querySelectorAll('[data-board-row]'));
+	rows.forEach((row) => {
+		row.hidden = normalized !== '' && !row.textContent.toLocaleLowerCase().includes(normalized);
+	});
+
+	const visible = rows.filter((row) => !row.hidden);
+	const noResults = manager.querySelector('[data-board-no-results]');
+	if (noResults) {
+		noResults.hidden = visible.length !== 0;
+	}
+}
+
+function setBoardExpanded(row, toggle, details, expanded) {
+	toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+	details.hidden = !expanded;
+	row.classList.toggle('is-expanded', expanded);
+	if (expanded) {
+		expandedBoards.add(row.dataset.board);
+	} else {
+		expandedBoards.delete(row.dataset.board);
+	}
+}
+
+function bindBoardManager() {
+	const manager = dashboard.querySelector('[data-board-manager]');
+	if (!manager || manager.dataset.bound) {
+		return;
+	}
+
+	manager.dataset.bound = '1';
+	const rows = Array.from(manager.querySelectorAll('[data-board-row]'));
+	const filter = manager.querySelector('[data-board-filter]');
+	const boardNames = new Set(rows.map((row) => row.dataset.board));
+	expandedBoards.forEach((name) => {
+		if (!boardNames.has(name)) {
+			expandedBoards.delete(name);
+		}
+	});
+
+	rows.forEach((row) => {
+		const toggle = row.querySelector('[data-board-toggle]');
+		const details = row.querySelector('[data-board-details]');
+		const surface = row.querySelector('.board-row-main');
+		if (!toggle || !details || !surface) {
+			return;
+		}
+
+		setBoardExpanded(row, toggle, details, expandedBoards.has(row.dataset.board));
+		toggle.addEventListener('click', () => {
+			const shouldExpand = toggle.getAttribute('aria-expanded') !== 'true';
+			setBoardExpanded(row, toggle, details, shouldExpand);
+		});
+		surface.addEventListener('click', (event) => {
+			if (event.target.closest('a, button, input, select, textarea, label, form')) {
+				return;
+			}
+			const selection = window.getSelection();
+			if (selection && !selection.isCollapsed && selection.toString().trim() !== '') {
+				return;
+			}
+
+			setBoardExpanded(row, toggle, details, toggle.getAttribute('aria-expanded') !== 'true');
+		});
+	});
+
+	if (filter) {
+		filter.value = boardFilter;
+		filter.addEventListener('input', () => {
+			boardFilter = filter.value;
+			filterBoards(manager, boardFilter);
+		});
+		filterBoards(manager, boardFilter);
+	}
+}
+
+/** Captures user-editable controls before dashboard markup is replaced. */
+function snapshotForm(form) {
+	const occurrences = new Map();
+	return Array.from(form.elements).flatMap((control) => {
+		if (!control.name || ['hidden', 'submit', 'button', 'reset', 'file'].includes(control.type)) {
+			return [];
+		}
+
+		const occurrence = occurrences.get(control.name) || 0;
+		occurrences.set(control.name, occurrence + 1);
+		return [{
+			name: control.name,
+			occurrence,
+			value: control.value,
+			checked: control.checked,
+			selected: control.options ? Array.from(control.options).filter((option) => option.selected).map((option) => option.value) : null,
+		}];
+	});
+}
+
+/** Finds the regenerated form without relying on mutable field values. */
+function actionForm(context) {
+	return Array.from(dashboard.querySelectorAll('form[data-ajax]'))
+		.find((form) => sameForm(actionContext(form), context)) || null;
+}
+
+/** Restores submitted values after an error response regenerates the dashboard. */
+function restoreForm(context, snapshot) {
+	const form = actionForm(context);
+	if (!form) {
+		return;
+	}
+
+	for (const saved of snapshot) {
+		const controls = Array.from(form.elements).filter((control) => control.name === saved.name);
+		const control = controls[saved.occurrence];
+		if (!control) {
+			continue;
+		}
+		if (saved.selected !== null) {
+			for (const option of control.options) {
+				option.selected = saved.selected.includes(option.value);
+			}
+		} else if (control.type === 'checkbox' || control.type === 'radio') {
+			control.checked = saved.checked;
+		} else {
+			control.value = saved.value;
+		}
+	}
+}
+
+/** Reapplies pending state after AJAX replaces dashboard markup. */
+function syncPendingActions() {
+	pendingActions.forEach((pending) => {
+		const form = actionForm(pending.context);
+		const submitter = form ? form.querySelector('button[type="submit"], button:not([type]), input[type="submit"]') : null;
+		if (!submitter) {
+			return;
+		}
+
+		pending.submitter = submitter;
+		submitter.disabled = true;
+		submitter.textContent = 'Working...';
+	});
+
+	updateProcessingState();
+	updateActivityStates();
+}
+
+function actionLabel(context) {
+	const action = context.action.replaceAll('_', ' ').replace(/^./, (character) => character.toUpperCase());
+	const details = [context.type, context.targetBoard, context.name, context.source]
+		.filter((value, index, values) => value && values.indexOf(value) === index);
+
+	if (context.action === 'customisation_mount') {
+		if (context.copy) {
+			details.push('copy');
+		} else if (context.recursive) {
+			details.push('recursive');
+		} else {
+			details.push('bind');
+		}
+		if (context.allowExternal) {
+			details.push('external path');
+		}
+	}
+
+	return details.length ? action + ' — ' + details.join(' · ') : action;
+}
+
+function addActivityEntry(actionId, context) {
+	activityEntries.push({
+		id: actionId,
+		context,
+		status: 'queued',
+		submittedAt: new Date(),
+		completedAt: null,
+		message: '',
+		output: '',
+	});
+	trimActivityEntries();
+}
+
+function completeActivityEntry(actionId, data) {
+	const entry = activityEntries.find((candidate) => candidate.id === actionId);
+	if (!entry) {
+		return;
+	}
+
+	entry.status = data.error ? 'error' : 'success';
+	entry.completedAt = new Date();
+	entry.message = data.error || data.notice || '';
+	entry.output = data.output || '';
+	trimActivityEntries();
+	renderActivityLog();
+}
+
+function updateActivityStates() {
+	let runningAssigned = false;
+	activityEntries.forEach((entry) => {
+		if (!pendingActions.has(entry.id) || entry.status === 'success' || entry.status === 'error') {
+			return;
+		}
+
+		entry.status = runningAssigned ? 'queued' : 'running';
+		runningAssigned = true;
+	});
+	renderActivityLog();
+}
+
+function trimActivityEntries() {
+	while (activityEntries.length > maxActivityEntries) {
+		const completedIndex = activityEntries.findIndex((entry) => !pendingActions.has(entry.id));
+		if (completedIndex === -1) {
+			return;
+		}
+		activityEntries.splice(completedIndex, 1);
+	}
+}
+
+function renderActivityLog() {
+	const log = document.getElementById('activity-log');
+	if (!log) {
+		return;
+	}
+
+	if (activityEntries.length === 0) {
+		log.textContent = 'No actions recorded yet.';
+		return;
+	}
+
+	log.textContent = activityEntries.map((entry) => {
+		const timestamp = (entry.completedAt || entry.submittedAt).toLocaleTimeString();
+		const lines = [ '[' + timestamp + '] ' + entry.status.toUpperCase() + '  ' + actionLabel(entry.context) ];
+		if (entry.message) {
+			lines.push(entry.message);
+		}
+		if (entry.output.trim()) {
+			lines.push(entry.output.trimEnd());
+		}
+		return lines.join('\n');
+	}).join('\n\n');
+	log.scrollTop = log.scrollHeight;
+}
+
+function bindAjax() {
+	bindBoardManager();
+	bindUpdateBanner();
+	bindMountedLists();
+
+	document.querySelectorAll('form[data-ajax]').forEach((form) => {
+		if (form.dataset.bound) {
+			return;
+		}
+
+		form.dataset.bound = '1';
+		form.addEventListener('submit', async(event) => {
+			event.preventDefault();
+			if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) {
+				return;
+			}
+
+			const context = actionContext(form);
+			const viewportSnapshot = snapshotViewport(context);
+			const formSnapshot = snapshotForm(form);
+			const submitter = event.submitter;
+			const original = submitter ? submitter.innerHTML : '';
+			const actionId = nextActionId++;
+			pendingActions.set(actionId, { context, submitter, original });
+			addActivityEntry(actionId, context);
+
+			syncPendingActions();
+			try {
+				const response = await fetch(location.href, {
+					method: 'POST',
+					headers: {
+						'X-Requested-With': 'XMLHttpRequest',
+					},
+					body: new FormData(form),
+				});
+				const responseText = await response.text();
+				let data;
+				try {
+					data = JSON.parse(responseText);
+				} catch (error) {
+					const detail = responseText
+						.replace(/<[^>]*>/g, ' ')
+						.replace(/\s+/g, ' ')
+						.trim()
+						.slice(0, 500);
+					throw new Error(detail || 'QuickInstall returned an invalid response. Check the UI error log.');
+				}
+				if (!data || typeof data !== 'object') {
+					throw new Error('QuickInstall returned an invalid response object.');
+				}
+				completeActivityEntry(actionId, data);
+				if (typeof data.html === 'string' && data.html !== '') {
+					dashboard.innerHTML = data.html;
+					bindAjax();
+					if (data.error) {
+						restoreForm(context, formSnapshot);
+					}
+					syncPendingActions();
+				}
+				showActionResult(data, context);
+				restoreViewport(context, viewportSnapshot);
+				scrollLog();
+			} catch (error) {
+				const message = 'Request failed: ' + error.message;
+				completeActivityEntry(actionId, { error: message, output: '' });
+				showActionResult({ error: message }, context);
+				restoreViewport(context, viewportSnapshot);
+				scrollLog();
+			} finally {
+				const pending = pendingActions.get(actionId);
+				pendingActions.delete(actionId);
+				if (pending && pending.submitter) {
+					pending.submitter.disabled = false;
+					pending.submitter.innerHTML = pending.original;
+				}
+				syncPendingActions();
+			}
+		});
+	});
+
+	document.querySelectorAll('[data-clear-log]').forEach((button) => {
+		if (button.dataset.bound) {
+			return;
+		}
+
+		button.dataset.bound = '1';
+		button.addEventListener('click', () => {
+			for (let index = activityEntries.length - 1; index >= 0; index--) {
+				if (!pendingActions.has(activityEntries[index].id)) {
+					activityEntries.splice(index, 1);
+				}
+			}
+			renderActivityLog();
+		});
+	});
+
+	renderActivityLog();
+}
+
+function bindMountedLists() {
+	document.querySelectorAll('[data-mounted-toggle]').forEach((button) => {
+		if (button.dataset.bound) {
+			return;
+		}
+
+		button.dataset.bound = '1';
+		button.addEventListener('click', () => {
+			const mounted = button.closest('.mounted');
+			const extras = mounted ? mounted.querySelectorAll('[data-mounted-extra]') : [];
+			const expanded = button.getAttribute('aria-expanded') === 'true';
+			extras.forEach((item) => {
+				item.hidden = expanded;
+			});
+			button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+			button.textContent = expanded ? button.dataset.moreLabel : 'Show less';
+		});
+	});
+}
+
+function bindUpdateBanner() {
+	const banner = dashboard.querySelector('[data-update-version]');
+	if (!banner) {
+		return;
+	}
+
+	const version = banner.dataset.updateVersion || '';
+	const key = 'qi.dismissedUpdate.' + version;
+	if (version && localStorage.getItem(key) === '1') {
+		banner.remove();
+		return;
+	}
+
+	const dismiss = banner.querySelector('[data-dismiss-update]');
+	if (!dismiss || dismiss.dataset.bound) {
+		return;
+	}
+
+	dismiss.dataset.bound = '1';
+	dismiss.addEventListener('click', () => {
+		if (version) {
+			localStorage.setItem(key, '1');
+		}
+		banner.remove();
+	});
+}
+
+/** Builds an immutable key for locating the same form after dashboard replacement. */
+function actionFormKey(form, formData) {
+	const action = formData.get('action') || '';
+	const section = form.closest('section');
+	const board = form.closest('[data-board]');
+	let repeatedTarget = '';
+	if (['ext_unmount', 'style_unmount', 'lang_unmount'].includes(action)) {
+		repeatedTarget = formData.get('name') || '';
+	} else if (action === 'source_remove') {
+		repeatedTarget = formData.get('source') || '';
+	}
+
+	return JSON.stringify([
+		section ? section.id : '',
+		board ? board.dataset.board : '',
+		action,
+		repeatedTarget,
+	]);
+}
+
+function actionContext(form) {
+	const formData = new FormData(form);
+	const section = form.closest('section');
+	const board = form.closest('[data-board]');
+	const contextualBoard = board ? board.dataset.board : '';
+
+	return {
+		action: formData.get('action') || '',
+		board: contextualBoard,
+		targetBoard: formData.get('board') || contextualBoard,
+		name: formData.get('name') || '',
+		section: section ? section.id : '',
+		source: formData.get('source') || '',
+		type: formData.get('type') || '',
+		copy: formData.has('copy'),
+		recursive: formData.has('recursive'),
+		allowExternal: formData.has('allow_external'),
+		formKey: actionFormKey(form, formData),
+	};
+}
+
+function showActionResult(data, context) {
+	const globalToast = dashboard.querySelector('.toast-stack');
+	if (globalToast) {
+		globalToast.remove();
+	}
+
+	const message = data.error || data.notice || '';
+	if (!message) {
+		return;
+	}
+
+	const result = document.createElement('div');
+	result.className = 'action-result ' + (data.error ? 'error' : 'notice');
+	result.setAttribute('role', data.error ? 'alert' : 'status');
+	result.textContent = message;
+
+	let target = null;
+	if (context.section) {
+		const section = document.getElementById(context.section);
+		target = section ? section.querySelector('.section-head') : null;
+	}
+	if (!target) {
+		target = dashboard.querySelector('.status-strip');
+	}
+
+	if (target) {
+		if (target.classList.contains('status-strip')) {
+			target.insertAdjacentElement('beforebegin', result);
+		} else {
+			target.insertAdjacentElement('afterend', result);
+		}
+		window.setTimeout(() => {
+			result.classList.add('is-dismissing');
+			window.setTimeout(() => result.remove(), 180);
+		}, data.error ? 9000 : 5000);
+	}
+}
+
+function boardHeader(name) {
+	const boards = dashboard.querySelectorAll('[data-board]');
+	for (const board of boards) {
+		if (board.dataset.board === name) {
+			return board.querySelector('.board-row-main');
+		}
+	}
+
+	return null;
+}
+
+function scrollLog() {
+	const log = document.getElementById('activity-log');
+	if (log) {
+		log.scrollTop = log.scrollHeight;
+	}
+}
+
+bindAjax();
+scrollLog();

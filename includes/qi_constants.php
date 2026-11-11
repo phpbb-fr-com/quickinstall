@@ -7,7 +7,10 @@
 *
 */
 
-define('QI_VERSION', '1.2.2-dev');
+// IMPORTANT NOTE:
+// This file is for development and debugging purposes only. Use class constants instead of
+// defining global constants here.
 
-// Cookies set by QI
-define('QI_PROFILE_COOKIE', 'qi_profile');	// Cookie with the latest used profile name as payload.
+// DO NOT COMMIT CHANGES TO THIS FILE TO GIT
+
+// define('QI_DEBUG', true); // un-comment this disable template caching

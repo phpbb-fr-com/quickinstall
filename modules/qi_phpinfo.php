@@ -8,24 +8,15 @@
 */
 
 /**
-* @ignore
-*/
-if (!defined('IN_QUICKINSTALL'))
-{
-	exit;
-}
-
-/**
  * qi_phpinfo module
  *
  * Shamelessly borrowed from phpBB.
  */
 class qi_phpinfo
 {
-	public function __construct()
+	public function run()
 	{
-		global $db, $template, $user, $settings;
-		global $quickinstall_path, $phpbb_root_path, $phpEx, $config;
+		global $template;
 
 		ob_start();
 		phpinfo(INFO_GENERAL | INFO_CONFIGURATION | INFO_MODULES | INFO_VARIABLES);
@@ -36,7 +27,7 @@ class qi_phpinfo
 
 		if (empty($phpinfo) || empty($output))
 		{
-			trigger_error('NO_PHPINFO_AVAILABLE', E_USER_WARNING);
+			trigger_error(qi::lang('NO_PHPINFO_AVAILABLE'), E_USER_WARNING);
 		}
 
 		$output = $output[1][0];
@@ -50,16 +41,36 @@ class qi_phpinfo
 		{
 			$output = preg_replace('#<tr class="v"><td>(.*?)</td></tr>#s', '<tr class="row1"><td><table class="type2"><tr><td>\1</td></tr></table></td></tr>', $output);
 		}
-		$output = preg_replace('#<table[^>]+>#i', '<table>', $output);
+		$output = preg_replace('#<table[^>]*>#i', '<table class="table table-bordered">', $output);
 		$output = preg_replace('#<img border="0"#i', '<img', $output);
-		$output = str_replace(array('class="e"', 'class="v"', 'class="h"', '<hr />', '<font', '</font>'), array('class="row1"', 'class="row2"', '', '', '<span', '</span>'), $output);
+		$output = str_replace(array('class="e"', 'class="v"', 'class="h"', '<hr />', '<font', '</font>'), array('', '', '', '', '<span', '</span>'), $output);
+		// Add searchable class to all but the 1st table
+		$output = preg_replace_callback('#<table class="(.*)">#', function($matches) {
+			static $index = 0;
+			if ($index++ === 0)
+			{
+				return $matches[0];
+			}
+			return '<table class="' . $matches[1] . ' searchable">';
+		}, $output);
+		// Process all the anchors for the menu
+		$anchor = '#<a name="(.*)">(.*)</a>#';
+		preg_match_all($anchor, $output, $matches);
+		foreach ($matches[1] as $key => $match)
+		{
+			$template->assign_block_vars('phpinfo', array(
+				'U_ANCHOR'	=> $matches[1][$key],
+				'TITLE'		=> $matches[2][$key],
+			));
+		}
+		$output = preg_replace($anchor, '<span class="anchor" id="$1">$2</span>', $output);
 
 		// Fix invalid anchor names (eg "module_Zend Optimizer")
 		$output = preg_replace_callback('#<a name="([^"]+)">#', array($this, 'remove_spaces'), $output);
 
 		if (empty($output))
 		{
-			trigger_error('NO_PHPINFO_AVAILABLE', E_USER_WARNING);
+			trigger_error(qi::lang('NO_PHPINFO_AVAILABLE'), E_USER_WARNING);
 		}
 
 		$orig_output = $output;
@@ -70,19 +81,16 @@ class qi_phpinfo
 		$template->assign_vars(array(
 			'S_PHPINFO'	=> true,
 			'PHPINFO'	=> $output,
+			'U_DELETE_COOKIES' => qi::url('phpinfo') . '&amp;delete-cookies=' . qi::PHPBB_COOKIE_PREFIX,
 		));
 
 		// Output page
-		qi::page_header($user->lang['PHPINFO'], $user->lang['PHPINFO_EXPLAIN']);
+		qi::page_header('PHPINFO');
 
-		$template->set_filenames(array(
-			'body' => 'phpinfo_body.html',
-		));
-
-		qi::page_footer();
+		qi::page_display('phpinfo_body');
 	}
 
-	function remove_spaces($matches)
+	public function remove_spaces($matches)
 	{
 		return '<a name="' . str_replace(' ', '_', $matches[1]) . '">';
 	}

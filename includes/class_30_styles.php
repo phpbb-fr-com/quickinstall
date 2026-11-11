@@ -17,7 +17,7 @@ if (!defined('IN_QUICKINSTALL'))
 
 class class_30_styles
 {
-	private $qi_default_style = '';
+	private $qi_default_style;
 
 	private $qi_styles = array();
 
@@ -25,10 +25,7 @@ class class_30_styles
 
 	private $acp_styles;
 
-	/**
-	 * @param int $install_styles. 1 = all styles, 2 only subsilver2.
-	 */
-	public function __construct($install_styles)
+	public function __construct()
 	{
 		global $settings, $phpbb_root_path;
 
@@ -37,17 +34,10 @@ class class_30_styles
 		$this->acp_styles = new acp_styles();
 		$this->acp_styles->main(0, '');
 
-		$subsilver_only			= ($install_styles == 2) ? true : false;
 		$this->qi_default_style	= $settings->get_config('default_style', '');
 
 		// Get available styles
 		$this->qi_get_styles();
-
-		if ($subsilver_only && !empty($this->qi_styles['subsilver2']))
-		{
-			$this->qi_install_style($this->qi_styles['subsilver2']);
-			return;
-		}
 
 		// Install all styles.
 		foreach ($this->qi_styles as $key => $style)
@@ -61,14 +51,15 @@ class class_30_styles
 
 	private function qi_install_style($style)
 	{
-		global $phpbb_root_path, $settings;
+		global $phpbb_root_path;
 
 		if (!empty($style['inherit_from']) && empty($this->qi_styles[$style['inherit_from']]))
 		{
 			// We don't have the parent skip this.
 			return;
 		}
-		else if (!empty($style['inherit_from']) && empty($this->qi_styles[$style['inherit_from']]['style_id']))
+
+		if (!empty($style['inherit_from']) && empty($this->qi_styles[$style['inherit_from']]['style_id']))
 		{
 			// Need to install the parent first.
 			$this->qi_install_style($this->qi_styles[$style['inherit_from']]);
@@ -87,11 +78,7 @@ class class_30_styles
 
 	private function qi_get_styles()
 	{
-		global $phpbb_root_path, $settings;
-
-		$styles	= array();
-		$dh		= dir($this->styles_path);
-
+		$dh = dir($this->styles_path);
 		while (($dir = $dh->read()) !== false)
 		{
 			// Ignore everything that starts with a dot, is a file or prosilver.
@@ -100,9 +87,8 @@ class class_30_styles
 				continue;
 			}
 
-			$style_name	= '';
 			$style_ary	= array(
-				'style_id'		=> ($dir == 'prosilver') ? 1 :0,
+				'style_id'		=> ($dir === 'prosilver') ? 1 : 0,
 				'template_id'	=> 0,
 				'theme_id'		=> 0,
 				'imageset_id'	=> 0,

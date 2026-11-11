@@ -1,0 +1,548 @@
+<?php
+/**
+ *
+ * QuickInstall CLI
+ *
+ * @copyright (c) 2026 phpBB Limited <https://www.phpbb.com>
+ * @license       GNU General Public License, version 2 (GPL-2.0)
+ *
+ */
+
+namespace QuickInstall\Sandbox;
+
+use InvalidArgumentException;
+use JsonException;
+use RuntimeException;
+
+/** Guards all project paths, workspace state, locks, and filesystem operations. */
+class Project
+{
+	private string $root;
+	private string $workspace;
+	private string $osFamily;
+
+	public function __construct(string $root, ?string $osFamily = null)
+	{
+		$this->osFamily = $osFamily ?: PHP_OS_FAMILY;
+		$this->root = rtrim($this->normalizeAbsolutePath($root, false), '/');
+		$this->workspace = $this->root . '/.qi';
+	}
+
+	public function init(): array
+	{
+		$created = [];
+		$customisationsPath = $this->customisationsPath();
+		$workspaceExists = is_file($this->workspace . '/sources.json') || is_file($this->workspace . '/boards.json');
+		if (!is_dir($customisationsPath))
+		{
+			if (!mkdir($customisationsPath, 0775, true) && !is_dir($customisationsPath))
+			{
+				throw new RuntimeException("Unable to create $customisationsPath");
+			}
+
+			$created[] = 'customisations drop zone';
+		}
+
+		foreach (['', '/sources', '/boards', '/runtime', '/db', '/cache'] as $dir)
+		{
+			$path = $this->workspace . $dir;
+			if (!is_dir($path) && !mkdir($path, 0775, true) && !is_dir($path))
+			{
+				throw new RuntimeException("Unable to create $path");
+			}
+		}
+
+		if (!$workspaceExists && is_dir($this->workspace))
+		{
+			$created[] = '.qi workspace';
+		}
+
+		foreach (['sources.json' => [], 'boards.json' => []] as $file => $default)
+		{
+			$path = $this->workspace . '/' . $file;
+			if (!file_exists($path))
+			{
+				$this->writeJson($file, $default);
+			}
+		}
+
+		return $created;
+	}
+
+	public function workspacePath(string $path = ''): string
+	{
+		return $this->workspace . ($path === '' ? '' : '/' . ltrim($path, '/'));
+	}
+
+	public function rootPath(string $path = ''): string
+	{
+		return $this->root . ($path === '' ? '' : '/' . ltrim($path, '/'));
+	}
+
+	public function customisationsPath(): string
+	{
+		return $this->rootPath('customisations');
+	}
+
+	/** Acquires the process-wide workspace mutation lock. */
+	public function lockOperations()
+	{
+		if (!is_dir($this->workspace) && !mkdir($this->workspace, 0775, true) && !is_dir($this->workspace))
+		{
+			throw new RuntimeException("Unable to create QuickInstall workspace: {$this->workspace}");
+		}
+
+		// Keep the file after unlocking. Removing it can let contenders lock
+		// different filesystem entries and both enter the critical section.
+		$path = $this->workspacePath('operation.lock');
+		$lock = fopen($path, 'c+b');
+		if (!is_resource($lock) || !flock($lock, LOCK_EX))
+		{
+			if (is_resource($lock))
+			{
+				fclose($lock);
+			}
+			throw new RuntimeException("Unable to lock QuickInstall workspace: $path");
+		}
+
+		return $lock;
+	}
+
+	public function unlockOperations($lock): void
+	{
+		if (is_resource($lock))
+		{
+			flock($lock, LOCK_UN);
+			fclose($lock);
+		}
+	}
+
+	public function boardPath(string $name): string
+	{
+		$this->assertName($name, 'board');
+		return $this->workspacePath('boards/' . $name);
+	}
+
+	public function sourcePath(string $version): string
+	{
+		$this->assertName($version, 'version');
+		return $this->workspacePath('sources/phpbb-' . $version);
+	}
+
+	/** Reads validated JSON while holding the registry's shared lock. */
+	public function readJson(string $file, array $default): array
+	{
+		$path = $this->workspacePath($file);
+		if (!file_exists($path))
+		{
+			return $default;
+		}
+
+		return $this->withJsonLock($path, LOCK_SH, static function () use ($path): array {
+			$contents = file_get_contents($path);
+			if ($contents === false)
+			{
+				throw new RuntimeException("Unable to read $path");
+			}
+
+			try
+			{
+				$data = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
+			}
+			catch (JsonException $e)
+			{
+				throw new RuntimeException("Invalid JSON state file: $path", 0, $e);
+			}
+
+			if (!is_array($data))
+			{
+				throw new RuntimeException("JSON state file must contain an object or array: $path");
+			}
+
+			return $data;
+		});
+	}
+
+	/** Atomically replaces JSON while holding the registry's exclusive lock. */
+	public function writeJson(string $file, array $data): void
+	{
+		$path = $this->workspacePath($file);
+		try
+		{
+			$encoded = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+		}
+		catch (JsonException $e)
+		{
+			throw new RuntimeException("Unable to encode JSON state for $path", 0, $e);
+		}
+
+		$this->withJsonLock($path, LOCK_EX, function () use ($path, $encoded): void {
+			$directory = dirname($path);
+			if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory))
+			{
+				throw new RuntimeException("Unable to create JSON state directory: $directory");
+			}
+
+			// Publish a complete temporary file so readers never see partial JSON.
+			$temp = tempnam($directory, '.' . basename($path) . '.tmp-');
+			if ($temp === false)
+			{
+				throw new RuntimeException("Unable to create temporary JSON state file for $path");
+			}
+
+			try
+			{
+				if (file_put_contents($temp, $encoded, LOCK_EX) !== strlen($encoded))
+				{
+					throw new RuntimeException("Unable to write temporary JSON state file for $path");
+				}
+				$this->replaceFile($temp, $path);
+			}
+			finally
+			{
+				if (is_file($temp))
+				{
+					@unlink($temp);
+				}
+			}
+		});
+	}
+
+	private function withJsonLock(string $path, int $operation, callable $callback)
+	{
+		$lockPath = $path . '.lock';
+		$directory = dirname($lockPath);
+		if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory))
+		{
+			throw new RuntimeException("Unable to create JSON lock directory: $directory");
+		}
+
+		$lock = fopen($lockPath, 'c+b');
+		if (!is_resource($lock))
+		{
+			throw new RuntimeException("Unable to open JSON lock file: $lockPath");
+		}
+
+		try
+		{
+			if (!flock($lock, $operation))
+			{
+				throw new RuntimeException("Unable to lock JSON state file: $path");
+			}
+
+			return $callback();
+		}
+		finally
+		{
+			flock($lock, LOCK_UN);
+			fclose($lock);
+		}
+	}
+
+	private function replaceFile(string $temp, string $path): void
+	{
+		if (@rename($temp, $path))
+		{
+			return;
+		}
+
+		if ($this->osFamily !== 'Windows' || !is_file($path))
+		{
+			throw new RuntimeException("Unable to replace JSON state file: $path");
+		}
+
+		// Windows cannot rename over an existing destination. Preserve the old
+		// state until the replacement has been installed successfully.
+		$backup = $path . '.replace-backup';
+		@unlink($backup);
+		if (!@rename($path, $backup))
+		{
+			throw new RuntimeException("Unable to prepare JSON state replacement: $path");
+		}
+
+		if (@rename($temp, $path))
+		{
+			@unlink($backup);
+			return;
+		}
+
+		@rename($backup, $path);
+		throw new RuntimeException("Unable to replace JSON state file: $path");
+	}
+
+	public function appendBoard(array $board): void
+	{
+		$name = (string) ($board['name'] ?? '');
+		$this->assertName($name, 'board');
+		$boards = $this->readJson('boards.json', []);
+		foreach (array_keys($boards) as $registeredName)
+		{
+			if ((string) $registeredName !== $name && $this->namesEqual((string) $registeredName, $name))
+			{
+				throw new InvalidArgumentException("Board already exists: $registeredName. Board names are case-insensitive.");
+			}
+		}
+		$boards[$name] = $board;
+		$this->writeJson('boards.json', $boards);
+	}
+
+	public function boards(): array
+	{
+		return $this->readJson('boards.json', []);
+	}
+
+	public function board(string $name): array
+	{
+		$boards = $this->boards();
+		if (!isset($boards[$name]))
+		{
+			throw new InvalidArgumentException("Unknown board: $name");
+		}
+
+		return $boards[$name];
+	}
+
+	public function removeBoard(string $name): void
+	{
+		$boards = $this->boards();
+		unset($boards[$name]);
+		$this->writeJson('boards.json', $boards);
+	}
+
+	public function runtimePath(string $name): string
+	{
+		$this->assertName($name, 'board');
+		return $this->workspacePath('runtime/' . $name);
+	}
+
+	public function composePath(string $name): string
+	{
+		return $this->runtimePath($name) . '/compose.yml';
+	}
+
+	public function dbPath(string $name): string
+	{
+		$this->assertName($name, 'board');
+		return $this->workspacePath('db/' . $name);
+	}
+
+	/** Recursively deletes only paths contained by the `.qi` workspace. */
+	public function deleteTree(string $path): void
+	{
+		if (!file_exists($path) && !is_link($path))
+		{
+			return;
+		}
+		// Every recursive delete passes through the workspace containment guard.
+		$this->assertWorkspacePath($path);
+
+		if (is_file($path) || is_link($path))
+		{
+			if (!unlink($path))
+			{
+				throw new RuntimeException("Unable to delete $path");
+			}
+			return;
+		}
+
+		$items = scandir($path);
+		if ($items === false)
+		{
+			throw new RuntimeException("Unable to scan $path");
+		}
+
+		foreach ($items as $item)
+		{
+			if ($item === '.' || $item === '..')
+			{
+				continue;
+			}
+
+			$this->deleteTree($path . '/' . $item);
+		}
+
+		if (!rmdir($path))
+		{
+			throw new RuntimeException("Unable to delete $path");
+		}
+	}
+
+	public function copyTree(string $source, string $target): void
+	{
+		if (is_dir($target))
+		{
+			throw new RuntimeException("Copy target already exists: $target");
+		}
+
+		if (!mkdir($target, 0775, true) && !is_dir($target))
+		{
+			throw new RuntimeException("Unable to create copy target: $target");
+		}
+
+		foreach (scandir($source) ?: [] as $item)
+		{
+			if ($item === '.' || $item === '..')
+			{
+				continue;
+			}
+
+			$src = $source . '/' . $item;
+			$dst = $target . '/' . $item;
+			if (is_dir($src) && !is_link($src))
+			{
+				$this->copyTree($src, $dst);
+			}
+			else if (!copy($src, $dst))
+			{
+				throw new RuntimeException("Unable to copy $src to $dst");
+			}
+		}
+	}
+
+	public function removeEmptyParents(string $path, string $stop): void
+	{
+		while ($path !== $stop && is_dir($path) && count(array_diff(scandir($path) ?: [], ['.', '..'])) === 0)
+		{
+			rmdir($path);
+			$path = dirname($path);
+		}
+	}
+
+	/** Resolves user paths and rejects escapes from the trusted drop zone by default. */
+	public function resolveDropZonePath(string $path, string $basePath, bool $allowExternal, string $error): string
+	{
+		$candidates = [
+			$path,
+			$this->rootPath($path),
+			$basePath . '/' . ltrim($path, '/'),
+		];
+
+		// realpath resolves traversal and symlinks before the containment check.
+		foreach ($candidates as $candidate)
+		{
+			$real = realpath($candidate);
+			if ($real !== false && ($allowExternal || $this->isPathUnder($real, $basePath)))
+			{
+				return $real;
+			}
+		}
+
+		throw new InvalidArgumentException($error);
+	}
+
+	public function isPathUnder(string $path, string $parent): bool
+	{
+		$parent = realpath($parent);
+		if ($parent === false)
+		{
+			return false;
+		}
+
+		$path = $this->comparablePath($this->normalizeAbsolutePath($path));
+		$parent = $this->comparablePath($this->normalizeAbsolutePath($parent));
+		return $path === $parent || str_starts_with($path, rtrim($parent, '/') . '/');
+	}
+
+	private function assertWorkspacePath(string $path): void
+	{
+		$path = $this->comparablePath($this->normalizeAbsolutePath($path));
+		$workspace = $this->comparablePath($this->normalizeAbsolutePath($this->workspace));
+		if ($path !== $workspace && !str_starts_with($path, $workspace . '/'))
+		{
+			throw new RuntimeException("Refusing to delete path outside QuickInstall workspace: $path");
+		}
+	}
+
+	private function normalizeAbsolutePath(string $path, bool $resolveRelative = true): string
+	{
+		if ($path === '')
+		{
+			return $this->root ?? '';
+		}
+
+		$path = str_replace('\\', '/', $path);
+		if ($resolveRelative && !$this->isAbsolutePath($path))
+		{
+			$path = $this->rootPath($path);
+		}
+
+		$prefix = '';
+		if (preg_match('/^[A-Za-z]:/', $path, $matches))
+		{
+			$prefix = strtoupper($matches[0]);
+			$path = substr($path, 2);
+		}
+		else if (str_starts_with($path, '//'))
+		{
+			$prefix = '//';
+			$path = substr($path, 2);
+		}
+		else if (str_starts_with($path, '/'))
+		{
+			$prefix = '/';
+			$path = substr($path, 1);
+		}
+
+		$parts = [];
+		foreach (explode('/', $path) as $part)
+		{
+			if ($part === '' || $part === '.')
+			{
+				continue;
+			}
+			if ($part === '..')
+			{
+				if ($parts)
+				{
+					array_pop($parts);
+				}
+				continue;
+			}
+			$parts[] = $part;
+		}
+
+		$normalized = implode('/', $parts);
+		if ($prefix === '/')
+		{
+			return '/' . $normalized;
+		}
+		if ($prefix === '//')
+		{
+			return '//' . $normalized;
+		}
+		if ($prefix !== '')
+		{
+			return $prefix . '/' . $normalized;
+		}
+
+		return $normalized;
+	}
+
+	private function isAbsolutePath(string $path): bool
+	{
+		return str_starts_with($path, '/') || (bool) preg_match('/^[A-Za-z]:\//', $path);
+	}
+
+	private function comparablePath(string $path): string
+	{
+		$path = rtrim($path, '/');
+		return $this->osFamily === 'Windows' ? strtolower($path) : $path;
+	}
+
+	public function assertName(string $name, string $label): void
+	{
+		$reservedWindowsName = (bool) preg_match('/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i', $name);
+		if (!preg_match('/^[A-Za-z0-9._-]+$/', $name)
+			|| $name === '.'
+			|| $name === '..'
+			|| ($this->osFamily === 'Windows' && ($reservedWindowsName || str_ends_with($name, '.'))))
+		{
+			throw new InvalidArgumentException("Invalid $label: $name");
+		}
+	}
+
+	public function namesEqual(string $left, string $right): bool
+	{
+		return strcasecmp($left, $right) === 0;
+	}
+}

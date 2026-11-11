@@ -19,32 +19,52 @@ if (!defined('IN_QUICKINSTALL'))
  * Generate DBMS select options for the settings tab.
  * Checks that each extension is loaded.
  *
- * @todo add more DBMS to QI.
- *
- * @param $default string, the DBMS to set as selected
- * @return string with options.
+ * @param string $selected the DBMS to set as selected
+ * @return array the options
  */
-function gen_dbms_options($default = 'mysqli')
+function gen_dbms_options($selected = 'mysqli')
 {
 	$dbms_ary = array(
-		'mysqli'	=> 'MySQLi',
-		'mysql'		=> 'MySQL',
-		'mssql'		=> 'MSSQL',
-		'pgsql'		=> 'PostgreSQL',
-		'sqlite'	=> 'SQLite',
+		'mysqli'	=> array(
+			'LABEL'		=> 'MySQLi',
+			'MODULE'	=> 'mysqli',
+		),
+		'mysql'		=> array(
+			'LABEL'		=> 'MySQL',
+			'MODULE'	=> 'mysql',
+		),
+		'mssql'		=>	array(
+			'LABEL'		=> 'MS SQL Server',
+			'MODULE'	=> 'mssql',
+		),
+		'postgres'	=> array(
+			'LABEL'		=> 'PostgreSQL 8.3+',
+			'MODULE'	=> 'pgsql',
+		),
+		'sqlite'	=> array(
+			'LABEL'		=> 'SQLite',
+			'MODULE'	=> 'sqlite',
+		),
+		'sqlite3'		=> array(
+			'LABEL'			=> 'SQLite3',
+			'MODULE'		=> 'sqlite3',
+		),
 	);
 
-	$options = '';
-	foreach ($dbms_ary as $ext => $title)
+	$options = [];
+	foreach ($dbms_ary as $dbms => $dbms_info)
 	{
-		if (extension_loaded($ext))
+		if (extension_loaded($dbms_info['MODULE']))
 		{
-			$selected = ($ext == $default) ? ' selected="selected"' : '';
-			$options .= "<option value='$ext'$selected>$title</option>";
+			$options[] = [
+				'name' => $dbms_info['LABEL'],
+				'value' => $dbms,
+				'selected' => $dbms === $selected,
+			];
 		}
 	}
 
-	return($options);
+	return $options;
 }
 
 /**
@@ -72,8 +92,7 @@ function qi_format_timezone_offset($tz_offset, $show_null = false)
 	$offset_minutes	= $offset_seconds / 60;
 	$offset_hours	= ($time_offset - $offset_seconds) / 3600;
 
-	$offset_string	= sprintf("%s%02d:%02d", $sign, $offset_hours, $offset_minutes);
-	return $offset_string;
+	return sprintf("%s%02d:%02d", $sign, $offset_hours, $offset_minutes);
 }
 
 /**
@@ -90,7 +109,7 @@ function qi_tz_select_compare($a, $b)
 	$b_sign = $b[3];
 	if ($a_sign != $b_sign)
 	{
-		return $a_sign == '-' ? -1 : 1;
+		return $a_sign === '-' ? -1 : 1;
 	}
 
 	$a_offset = substr($a, 4, 5);
@@ -99,49 +118,44 @@ function qi_tz_select_compare($a, $b)
 	{
 		$a_name = substr($a, 12);
 		$b_name = substr($b, 12);
-		if ($a_name == $b_name)
+		if ($a_name === $b_name)
 		{
 			return 0;
 		}
-		else if ($a_name == 'UTC')
+
+		if ($a_name === 'UTC')
 		{
 			return -1;
 		}
-		else if ($b_name == 'UTC')
+
+		if ($b_name === 'UTC')
 		{
 			return 1;
 		}
-		else
-		{
-			return $a_name < $b_name ? -1 : 1;
-		}
+
+		return $a_name < $b_name ? -1 : 1;
 	}
-	else
+
+	if ($a_sign === '-')
 	{
-		if ($a_sign == '-')
-		{
-			return $a_offset > $b_offset ? -1 : 1;
-		}
-		else
-		{
-			return $a_offset < $b_offset ? -1 : 1;
-		}
+		return $a_offset > $b_offset ? -1 : 1;
 	}
+
+	return $a_offset < $b_offset ? -1 : 1;
 }
 
 /**
-* Mostly borrowed from phpBB 3.1 includes/functions.php/phpbb_timezone_select()
-* To have it available for 3.0.x too.
-*
-* Options to pick a timezone and date/time
-*
-* @param	\phpbb\template\template $template	phpBB template object
-* @param	\phpbb\user	$user				Object of the current user
-* @param	string		$default			A timezone to select
-* @param	boolean		$truncate			Shall we truncate the options text
-*
-* @return		array		Returns an array containing the options for the time selector.
-*/
+ * Mostly borrowed from phpBB 3.1 includes/functions.php/phpbb_timezone_select()
+ * To have it available for 3.0.x too.
+ *
+ * Options to pick a timezone and date/time
+ *
+ * @param \phpbb\user $user     Object of the current user
+ * @param string      $default  A timezone to select
+ * @param boolean     $truncate Shall we truncate the options text
+ *
+ * @return string Returns the options for the time selector.
+ */
 function qi_timezone_select($user, $default = '', $truncate = false)
 {
 	date_default_timezone_set('UTC');
@@ -203,108 +217,12 @@ function qi_timezone_select($user, $default = '', $truncate = false)
 	return $tz_select;
 }
 
-function gen_error_msg($msg_text, $msg_title = 'General error', $msg_explain = '', $update_profiles = false)
-{
-	global $quickinstall_path, $user;
-
-	$settings_url = qi::url('settings');
-
-	if ($update_profiles)
-	{
-		$settings_form = '<div style="margin: 10px 0 0 0; text-align: center;"><p><form action="" method="post"><input class="button2" type="submit" name="update_all" value="' .
-		$user->lang['UPDATE_PROFILES'] . '" /></form></p></div>';
-	}
-	else
-	{
-		$settings_form = '';
-	}
-
-	if (!empty($user) && !empty($user->lang))
-	{
-		$l_return_index = sprintf($user->lang['GO_QI_MAIN'], '<a href="' . qi::url('main') . '">', '</a> &bull; ');
-		$l_return_index .= sprintf($user->lang['GO_QI_SETTINGS'], '<a href="' . qi::url('settings') . '">', '</a>');
-	}
-	else
-	{
-		$l_return_index = '<a href="' . qi::url('main') . '">Go to QuickInstall main page</a> &bull; ';
-		$l_return_index .= '<a href="' . qi::url('settings') . '">Go to settings</a> &bull; ';
-	}
-
-	$qi_version		= QI_VERSION;
-
-	phpbb_functions::send_status_line(503, 'Service Unavailable');
-
-echo<<<ERROR_PAGE
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" dir="ltr">
-	<head>
-		<meta http-equiv="content-type" content="text/html; charset=utf-8" />
-		<title>$msg_title</title>
-		<link href="{$quickinstall_path}style/style.css" rel="stylesheet" type="text/css" media="screen" />
-	</head>
-	<body id="errorpage">
-		<div id="wrap">
-			<div id="page-header">
-				$l_return_index
-			</div>
-
-			<div id="page-body">
-				<div id="acp">
-					<div class="panel">
-						<span class="corners-top"><span></span></span>
-						<div id="content">
-							<h1 style="margin-bottom: 10px; text-align: center;">$msg_title</h1>
-							<div style="font-weight: bold;">$msg_explain<br /><br /></div>
-							<div>$msg_text</div>
-						$settings_form
-						</div>
-						<div style="padding-left: 10px;">
-							$l_return_index
-						</div>
-						<span class="corners-bottom"><span></span></span>
-					</div>
-				</div>
-			</div>
-
-			<div id="page-footer">
-				<a href="https://www.phpbb.com/customise/db/official_tool/phpbb3_quickinstall/">phpBB QuickInstall</a> $qi_version for phpBB 3.0 and 3.1 &copy; <a href="https://www.phpbb.com/">phpBB Limited</a><br />
-				Powered by phpBB&reg; Forum Software &copy; <a href="https://www.phpbb.com/">phpBB Limited</a>
-			</div>
-		</div>
-	</body>
-</html>
-ERROR_PAGE;
-
-	exit;
-}
-
-function create_board_warning($msg_title, $msg_text, $page)
-{
-	global $settings, $phpEx;
-
-	$args =  'page='			. urlencode($page);
-	$args .= '&error_title='	. urlencode($msg_title);
-	$args .= '&error_msg='		. urlencode($msg_text);
-	$args .= '&error='	. 1;
-
-	foreach ($_POST as $key => $value)
-	{
-		if (!empty($value))
-		{
-			$args .= "&$key=" . urlencode($value);
-		}
-	}
-
-	$url = "index.$phpEx?$args";
-	qi::redirect($url);
-}
-
 function legacy_set_var(&$result, $var, $type, $multibyte = false)
 {
 	settype($var, $type);
 	$result = $var;
 
-	if ($type == 'string')
+	if ($type === 'string')
 	{
 		$result = trim(htmlspecialchars(str_replace(array("\r\n", "\r", "\0"), array("\n", "\n", ''), $result), ENT_COMPAT, 'UTF-8'));
 
@@ -329,6 +247,13 @@ function legacy_set_var(&$result, $var, $type, $multibyte = false)
 	}
 }
 
+function qi_request_var($var_name, $default, $multibyte = false, $cookie = false)
+{
+	$method = (function_exists('request_var')) ? 'request_var' : 'legacy_request_var';
+
+	return $method($var_name, $default, $multibyte, $cookie);
+}
+
 function legacy_request_var($var_name, $default, $multibyte = false, $cookie = false)
 {
 	if (!$cookie && isset($_COOKIE[$var_name]))
@@ -341,7 +266,7 @@ function legacy_request_var($var_name, $default, $multibyte = false, $cookie = f
 	}
 
 	$super_global = ($cookie) ? '_COOKIE' : '_REQUEST';
-	if (!isset($GLOBALS[$super_global][$var_name]) || is_array($GLOBALS[$super_global][$var_name]) != is_array($default))
+	if (!isset($GLOBALS[$super_global][$var_name]) || is_array($GLOBALS[$super_global][$var_name]) !== is_array($default))
 	{
 		return (is_array($default)) ? array() : $default;
 	}
@@ -353,16 +278,22 @@ function legacy_request_var($var_name, $default, $multibyte = false, $cookie = f
 	}
 	else
 	{
-		list($key_type, $type) = each($default);
+		// Get first key and value
+		$key_type = key($default);
+		$type = current($default);
 		$type = gettype($type);
 		$key_type = gettype($key_type);
-		if ($type == 'array')
+
+		if ($type === 'array')
 		{
 			reset($default);
 			$default = current($default);
-			list($sub_key_type, $sub_type) = each($default);
+
+			// Get first key and value of the nested array
+			$sub_key_type = key($default);
+			$sub_type = current($default);
 			$sub_type = gettype($sub_type);
-			$sub_type = ($sub_type == 'array') ? 'NULL' : $sub_type;
+			$sub_type = ($sub_type === 'array') ? 'NULL' : $sub_type;
 			$sub_key_type = gettype($sub_key_type);
 		}
 	}
@@ -375,7 +306,7 @@ function legacy_request_var($var_name, $default, $multibyte = false, $cookie = f
 		foreach ($_var as $k => $v)
 		{
 			legacy_set_var($k, $k, $key_type);
-			if ($type == 'array' && is_array($v))
+			if ($type === 'array' && is_array($v))
 			{
 				foreach ($v as $_k => $_v)
 				{
@@ -389,7 +320,7 @@ function legacy_request_var($var_name, $default, $multibyte = false, $cookie = f
 			}
 			else
 			{
-				if ($type == 'array' || is_array($v))
+				if ($type === 'array' || is_array($v))
 				{
 					$v = null;
 				}
@@ -417,7 +348,7 @@ function validate_dbname($dbname, $first_char = false, $path = false)
 	if (empty($dbname))
 	{
 		// Nothing to validate, this should already have been catched.
-		return('');
+		return '';
 	}
 
 	// Try to replace some chars whit their valid equivalents
@@ -430,25 +361,30 @@ function validate_dbname($dbname, $first_char = false, $path = false)
 	$dbname = str_replace($chars_replace, '_', $dbname);
 
 	// Just drop remaining non valid chars.
-	$dbname = preg_replace('/[^A-Za-z0-9-_]*/', '', $dbname);
+	$dbname = preg_replace('/[^A-Za-z0-9-_.]*/', '', $dbname);
 
 	// make sure that the first char is not a underscore if set.
-	$prefix = ($first_char && $dbname[0] == '_') ? 'qi' : '';
+	$prefix = ($first_char && $dbname[0] === '_') ? 'qi' : '';
 
-	return($prefix . $dbname);
+	return $prefix . $dbname;
 }
 
 /**
- * Get a list of alternative environments.
+ * Get an array of alternative environments for select menus.
  */
 function get_alternative_env($selected_option = '')
 {
-	global $user, $quickinstall_path;
+	global $quickinstall_path;
 
-	$none_selected	= (empty($selected_option)) ? ' selected="selected"' : '';
-	$alt_env		= '';
-	$dh				= dir($quickinstall_path . 'sources/phpBB3_alt');
+	$alt_envs = [
+		[
+			'name' => qi::lang('DEFAULT_ENV'),
+			'value' => '',
+			'selected' => empty($selected_option),
+		],
+	];
 
+	$dh = dir($quickinstall_path . 'sources/phpBB3_alt');
 	while (false !== ($file = $dh->read()))
 	{
 		// Ignore everything that starts with a dot.
@@ -457,19 +393,16 @@ function get_alternative_env($selected_option = '')
 			continue;
 		}
 
-		$selected	= ($file == $selected_option) ? ' selected="selected"' : '';
-		$file	= htmlspecialchars($file);
-
-		$alt_env .= "<option{$selected}>$file</option>";
+		$value = htmlspecialchars($file);
+		$alt_envs[] = [
+			'name' => $value,
+			'value' => $value,
+			'selected' => $file === $selected_option,
+		];
 	}
 	$dh->close();
 
-	if (!empty($alt_env))
-	{
-		$alt_env = "<option value=''$none_selected>{$user->lang['DEFAULT_ENV']}</option>" . $alt_env;
-	}
-
-	return($alt_env);
+	return $alt_envs;
 }
 
 /**
@@ -477,7 +410,7 @@ function get_alternative_env($selected_option = '')
  */
 function get_installed_boards()
 {
-	global $settings, $template, $phpEx;
+	global $settings, $template;
 
 	// list of boards
 	$boards_dir = $settings->get_boards_dir();
@@ -491,42 +424,66 @@ function get_installed_boards()
 			continue;
 		}
 
-		$version = '';
-		// Try to find out phpBB version.
-		if (file_exists("{$boards_dir}$board/includes/constants.$phpEx"))
-		{
-			$rows = file("{$boards_dir}$board/includes/constants.$phpEx", FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);
-
-			foreach ($rows as $row)
-			{
-				if (($pos = strpos($row, "'PHPBB_VERSION', '")) !== false)
-				{
-					$pos = $pos + 18;
-					$version = substr($row, $pos, -3);
-					break;
-				}
-			}
-			unset($rows);
-		}
-
 		$template->assign_block_vars('board_row', array(
 			'BOARD_NAME'	=> htmlspecialchars($board),
 			'BOARD_URL'		=> $settings->get_boards_url() . urlencode($board),
-			'VERSION'		=> $version,
+			'VERSION'		=> get_phpbb_version($boards_dir . $board),
 		));
 	}
+}
+
+/**
+ * Returns the version of a phpBB board (acquired from its constant.php file)
+ *
+ * @param string $board_path Path to a phpbb board root directory
+ * @return string A phpbb version, e.g.: '3.3.0'
+ */
+function get_phpbb_version($board_path)
+{
+	global $phpEx;
+
+	$version = '';
+	// Try to find out phpBB version.
+	if (file_exists("$board_path/includes/constants.$phpEx"))
+	{
+		$rows = file("$board_path/includes/constants.$phpEx", FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);
+
+		foreach ($rows as $row)
+		{
+			if (strpos($row, 'PHPBB_VERSION') !== false)
+			{
+				preg_match("/'PHPBB_VERSION', '(.*)'/", $row, $matches);
+				$version = isset($matches[1]) ? $matches[1] : '';
+				break;
+			}
+		}
+		unset($rows);
+	}
+
+	return $version;
 }
 
 function db_connect($db_data = '')
 {
 	global $phpbb_root_path, $phpEx, $sql_db, $db, $quickinstall_path, $settings;
 
-	$db_data = (empty($db_data)) ? $settings->get_db_data() : $db_data;
+	if (empty($db_data))
+	{
+		list($dbms, $dbhost, $dbuser, $dbpasswd, $dbport, $db_prefix) = $settings->get_db_data();
+		// When db_data is empty, it means the db does not exist yet, so for postgres
+		// we need to set dbname to false so the driver can connect to the postgres db
+		$dbname = ($dbms !== 'postgres') ? $settings->get_config('dbname') : false;
+	}
+	else
+	{
+		list($dbms, $dbhost, $dbuser, $dbpasswd, $dbport, $db_prefix) = $db_data;
+		$dbname = $settings->get_config('dbname');
+	}
 
-	list($dbms, $dbhost, $dbuser, $dbpasswd, $dbport) = $db_data;
+	$dbname = $dbname ? $db_prefix . $dbname : $dbname;
 
 	// If we get here and the extension isn't loaded it should be safe to just go ahead and load it
-	$available_dbms = get_available_dbms($dbms);
+	$available_dbms = qi_get_available_dbms($dbms);
 
 	if (!isset($available_dbms[$dbms]['DRIVER']))
 	{
@@ -534,37 +491,35 @@ function db_connect($db_data = '')
 	}
 
 	// Instantiate the database
-	if (defined('PHPBB_31'))
+	if (qi::phpbb_branch('3.1'))
 	{
 		$dbal = substr($available_dbms[$dbms]['DRIVER'], strrpos($available_dbms[$dbms]['DRIVER'], '\\') + 1);
 		// Load the appropriate database class if not already loaded.
 		if (!class_exists('dbal_' . $dbal . '_qi'))
 		{
 			// now the quickinstall dbal extension
-			include($quickinstall_path . 'includes/db/31/' . $dbal . '.' . $phpEx);
+			include($quickinstall_path . 'includes/db/' . $dbal . '.' . $phpEx);
 		}
-
-		$sql_db = 'dbal_' . $dbal  . '_qi';
 	}
 	else
 	{
+		$dbal = $available_dbms[$dbms]['DRIVER'];
 		// Load the appropriate database class if not already loaded.
-		if (!class_exists('dbal_' . $available_dbms[$dbms]['DRIVER'] . '_qi'))
+		if (!class_exists('dbal_' . $dbal . '_qi'))
 		{
 			// phpBB dbal class.
-			include($phpbb_root_path . 'includes/db/' . $available_dbms[$dbms]['DRIVER'] . '.' . $phpEx);
+			include($phpbb_root_path . 'includes/db/' . $dbal . '.' . $phpEx);
 
 			// now the quickinstall dbal extension
-			include($quickinstall_path . 'includes/db/' . $available_dbms[$dbms]['DRIVER'] . '.' . $phpEx);
+			include($quickinstall_path . 'includes/db/30x/' . $dbal . '.' . $phpEx);
 		}
-		$sql_db = 'dbal_' . $available_dbms[$dbms]['DRIVER'] . '_qi';
 	}
-
+	$sql_db = 'dbal_' . $dbal . '_qi';
 	$db = new $sql_db();
 
-	if (defined('PHPBB_31'))
+	if (qi::phpbb_branch('3.1'))
 	{
-		$db->sql_connect($dbhost, $dbuser, $dbpasswd, $settings->get_config('dbname') , $dbport, false, false);
+		$db->sql_connect($dbhost, $dbuser, $dbpasswd, $dbname, $dbport, false, false);
 	}
 	else
 	{
@@ -573,7 +528,7 @@ function db_connect($db_data = '')
 
 	$db->sql_return_on_error(true);
 
-	return($db);
+	return $db;
 }
 
 /**
@@ -588,4 +543,152 @@ function db_close($db = false)
 	}
 
 	$db->sql_close();
+}
+
+function get_db_doctrine()
+{
+	global $settings;
+
+	$dbms = $settings->get_config('dbms');
+	$dbhost = $settings->get_config('dbhost');
+	$dbuser = $settings->get_config('dbuser');
+	$dbpasswd = $settings->get_config('dbpasswd');
+	$dbname = $settings->get_config('dbname');
+	$dbport = $settings->get_config('dbport');
+	$db_prefix = $settings->get_config('db_prefix');
+
+	// Validate and prepend the db prefix to the database name
+	$dbname = $db_prefix . validate_dbname($dbname, true);
+
+	// SQLite needs the dbname appended to the dbhost
+	if (in_array($dbms, array('sqlite', 'sqlite3')))
+	{
+		$dbhost .= $dbname;
+	}
+
+	return \phpbb\db\doctrine\connection_factory::get_connection_from_params(
+		$dbms,
+		$dbhost,
+		$dbuser,
+		$dbpasswd,
+		$dbname,
+		$dbport
+	);
+}
+
+function qi_get_available_dbms($dbms)
+{
+	if (qi::phpbb_branch('3.2'))
+	{
+		global $phpbb_root_path;
+		$database = new \phpbb\install\helper\database(new \phpbb\filesystem\filesystem(), $phpbb_root_path);
+		return call_user_func(array($database, 'get_available_dbms'), $dbms);
+	}
+
+	return call_user_func('get_available_dbms', $dbms);
+}
+
+function qi_get_phpbb_version()
+{
+	if (qi::phpbb_branch('4.0'))
+	{
+		return '4.0';
+	}
+
+	if (qi::phpbb_branch('3.3'))
+	{
+		return '3.3';
+	}
+
+	if (qi::phpbb_branch('3.2'))
+	{
+		return '3.2';
+	}
+
+	if (qi::phpbb_branch('3.1'))
+	{
+		return '3.1';
+	}
+
+	return '3.0';
+}
+
+/**
+ * Sets a configuration option's value.
+ *
+ * QI uses this for legacy reasons. In 3.0.x set_config() is used to set config
+ * object values. In 3.1.x, 3.2.x and 3.3.x it is deprecated. This function
+ * emulates the deprecated function in case it is ever removed from 4.x.x.
+ *
+ * Please note that this function does not update the is_dynamic value for
+ * an already existing config option.
+ *
+ * @param string $config_name   The configuration option's name
+ * @param string $config_value  New configuration value
+ * @param bool   $is_dynamic    Whether this variable should be cached (false) or
+ *                              if it changes too frequently (true) to be
+ *                              efficiently cached.
+ * @param null   $set_config    The config object
+ * @return void
+ */
+function qi_set_config($config_name, $config_value, $is_dynamic = false, $set_config = null)
+{
+	if (function_exists('set_config'))
+	{
+		set_config($config_name, $config_value, $is_dynamic, $set_config);
+		return;
+	}
+
+	static $config = null;
+
+	if ($set_config !== null)
+	{
+		$config = $set_config;
+
+		if (empty($config_name))
+		{
+			return;
+		}
+	}
+
+	$config->set($config_name, $config_value, !$is_dynamic);
+}
+
+/**
+ * Increments an integer config value directly in the database.
+ *
+ * QI uses this for legacy reasons. In 3.0.x set_config_count() is used to
+ * increment config values. In 3.1.x, 3.2.x and 3.3.x it is deprecated. This
+ * function emulates the deprecated function in case it is ever removed from 4.x.x.
+ *
+ * @param string $config_name   The configuration option's name
+ * @param int    $increment     Amount to increment by
+ * @param bool   $is_dynamic    Whether this variable should be cached (false) or
+ *                              if it changes too frequently (true) to be
+ *                              efficiently cached.
+ * @param null   $set_config    The config object
+ *
+ * @return void
+ */
+function qi_set_config_count($config_name, $increment, $is_dynamic = false, $set_config = null)
+{
+	if (function_exists('set_config_count'))
+	{
+		set_config_count($config_name, $increment, $is_dynamic, $set_config);
+		return;
+	}
+
+	static $config = null;
+
+	if ($set_config !== null)
+	{
+		$config = $set_config;
+
+		if (empty($config_name))
+		{
+			return;
+		}
+	}
+
+	$config->increment($config_name, $increment, !$is_dynamic);
 }

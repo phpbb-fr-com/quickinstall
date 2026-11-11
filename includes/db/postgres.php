@@ -19,7 +19,7 @@ if (!defined('IN_QUICKINSTALL'))
 * Postgres dbal extension
 * @package dbal
 */
-class dbal_postgres_qi extends dbal_postgres
+class dbal_postgres_qi extends \phpbb\db\driver\postgres
 {
 	public function sql_connect($dbhost, $dbuser, $dbpass, $dbname, $dbport = false, $persistency = false, $new_link=  false)
 	{
@@ -31,14 +31,5 @@ class dbal_postgres_qi extends dbal_postgres
 			$dbname = 'postgres';
 		}
 		return parent::sql_connect($dbhost, $dbuser, $dbpass, $dbname, $dbport, $persistency, $new_link);
-	}
-
-	/**
-	 * Updates value of a sequence.
-	 */
-	public function update_sequence($sequence_name, $value)
-	{
-	      $result = $this->sql_query("select setval('$sequence_name', '$value')");
-	      $this->sql_freeresult($result);
 	}
 }

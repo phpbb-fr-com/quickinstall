@@ -1,0 +1,196 @@
+<?php
+
+namespace QuickInstall\Tests\Unit;
+
+use InvalidArgumentException;
+use PHPUnit\Framework\TestCase;
+use QuickInstall\Sandbox\Project;
+use QuickInstall\Tests\Support\TempProjectTrait;
+use RuntimeException;
+
+class ProjectTest extends TestCase
+{
+	use TempProjectTrait;
+
+	public function testNormalizesWindowsDriveAndUncPaths(): void
+	{
+		$driveProject = new Project('c:\\Projects\\QuickInstall\\', 'Windows');
+		$uncProject = new Project('\\\\server\\share\\QuickInstall', 'Windows');
+
+		self::assertSame('C:/Projects/QuickInstall/.qi', $driveProject->workspacePath());
+		self::assertSame('//server/share/QuickInstall/bin/qi', $uncProject->rootPath('bin/qi'));
+	}
+
+	public function testWindowsPathContainmentIsSeparatorAndCaseInsensitive(): void
+	{
+		$root = $this->createTempProjectRoot();
+		$project = new Project($root, 'Windows');
+		$project->init();
+		$inside = $project->customisationsPath() . '/Vendor/Extension';
+		mkdir($inside, 0775, true);
+
+		self::assertTrue($project->isPathUnder(
+			str_replace('/', '\\', strtoupper((string) realpath($inside))),
+			$project->customisationsPath()
+		));
+	}
+
+	public function testInitCreatesWorkspaceAndDefaults(): void
+	{
+		$root = $this->createTempProjectRoot();
+		$project = new Project($root);
+
+		$created = $project->init();
+
+		self::assertContains('customisations drop zone', $created);
+		self::assertContains('.qi workspace', $created);
+		self::assertDirectoryExists($root . '/customisations');
+		self::assertDirectoryExists($root . '/.qi/sources');
+		self::assertDirectoryExists($root . '/.qi/boards');
+		self::assertDirectoryExists($root . '/.qi/cache');
+		self::assertSame([], $project->readJson('sources.json', ['unexpected']));
+		self::assertSame([], $project->init());
+	}
+
+	public function testRejectsInvalidBoardNames(): void
+	{
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('Invalid board');
+
+		(new Project($this->createTempProjectRoot()))->boardPath('../outside');
+	}
+
+	/**
+	 * @dataProvider dangerousNameProvider
+	 */
+	public function testRejectsNamesThatResolveToParentDirectories(string $name): void
+	{
+		$project = new Project($this->createTempProjectRoot());
+
+		$this->expectException(InvalidArgumentException::class);
+		$project->boardPath($name);
+	}
+
+	public function dangerousNameProvider(): array
+	{
+		return [['.'], ['..']];
+	}
+
+	public function testRejectsWindowsDeviceNames(): void
+	{
+		$project = new Project('C:\\Projects\\QuickInstall', 'Windows');
+
+		$this->expectException(InvalidArgumentException::class);
+		$project->boardPath('NUL');
+	}
+
+	public function testMalformedJsonStateIsReported(): void
+	{
+		$project = new Project($this->createTempProjectRoot());
+		$project->init();
+		file_put_contents($project->workspacePath('boards.json'), '{broken');
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('Invalid JSON state file');
+		$project->boards();
+	}
+
+	public function testBoardRegistryRejectsNamesThatDifferOnlyByCase(): void
+	{
+		$project = new Project($this->createTempProjectRoot());
+		$project->init();
+		$project->appendBoard(['name' => 'demo']);
+
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('Board names are case-insensitive');
+		$project->appendBoard(['name' => 'Demo']);
+	}
+
+	public function testBoardRegistryUpdatesNumericName(): void
+	{
+		$project = new Project($this->createTempProjectRoot());
+		$project->init();
+		$project->appendBoard(['name' => '322', 'extensions' => []]);
+
+		$project->appendBoard([
+			'name' => '322',
+			'extensions' => [
+				'vse/abbc3' => ['mode' => 'bind', 'source' => '/tmp/abbc3'],
+			],
+		]);
+
+		self::assertSame(
+			['mode' => 'bind', 'source' => '/tmp/abbc3'],
+			$project->board('322')['extensions']['vse/abbc3']
+		);
+	}
+
+	public function testDeleteTreeRefusesPathOutsideWorkspace(): void
+	{
+		$root = $this->createTempProjectRoot();
+		$project = new Project($root);
+		$project->init();
+		$outside = $root . '/outside.txt';
+		file_put_contents($outside, 'keep');
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('Refusing to delete path outside QuickInstall workspace');
+
+		$project->deleteTree($outside);
+	}
+
+	public function testResolveDropZonePathGuardsExternalPaths(): void
+	{
+		$root = $this->createTempProjectRoot();
+		$project = new Project($root);
+		$project->init();
+		$dropZone = $project->customisationsPath();
+		$inside = $dropZone . '/thing';
+		mkdir($inside);
+		$external = $root . '/external';
+		mkdir($external);
+
+		self::assertSame(realpath($inside), $project->resolveDropZonePath('thing', $dropZone, false, 'blocked'));
+
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('blocked');
+		$project->resolveDropZonePath($external, $dropZone, false, 'blocked');
+	}
+
+	public function testCopyTreeCopiesNestedFilesAndRemoveEmptyParentsPrunesOnlyToStop(): void
+	{
+		$root = $this->createTempProjectRoot();
+		$project = new Project($root);
+		$project->init();
+		$source = $root . '/source';
+		$target = $project->workspacePath('boards/demo/ext/vendor/package');
+		mkdir($source . '/nested', 0775, true);
+		file_put_contents($source . '/nested/file.txt', 'copied');
+
+		$project->copyTree($source, $target);
+
+		self::assertSame('copied', file_get_contents($target . '/nested/file.txt'));
+
+		$project->deleteTree($target);
+		$project->removeEmptyParents(dirname($target), $project->workspacePath('boards/demo/ext'));
+
+		self::assertDirectoryDoesNotExist($project->workspacePath('boards/demo/ext/vendor'));
+		self::assertDirectoryExists($project->workspacePath('boards/demo/ext'));
+	}
+
+	public function testCopyTreeRejectsExistingTarget(): void
+	{
+		$root = $this->createTempProjectRoot();
+		$project = new Project($root);
+		$project->init();
+		$source = $root . '/source';
+		$target = $project->workspacePath('target');
+		mkdir($source);
+		mkdir($target);
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('Copy target already exists');
+
+		$project->copyTree($source, $target);
+	}
+}

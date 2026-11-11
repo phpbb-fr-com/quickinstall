@@ -1,0 +1,57 @@
+<!doctype html>
+<html dir="{{ S_CONTENT_DIRECTION }}" lang="{{ S_USER_LANG }}">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- The page supports both light and dark color schemes, with light being default -->
+	<meta name="color-scheme" content="light dark">
+	<!-- Defines them color of browser interface, if supported -->
+	<meta name="theme-color" content="#29303D">
+	<link rel="preconnect" href="https://fonts.gstatic.com">
+	<link href="https://fonts.googleapis.com/css2?family=Open+Sans&display=auto" rel="stylesheet">
+	<!-- Bootstrap CSS -->
+	<link href="{{ QI_ROOT_PATH }}style/assets/css/qi_bootstrap.min.css?v={{ QI_VERSION }}" rel="stylesheet" media="screen">
+	<!-- Bootstrap-Dark Variant CSS (the media attribute is for dark auto-switching) -->
+	<link href="{{ QI_ROOT_PATH }}style/assets/css/bootstrap-nightfall.min.css?v={{ QI_VERSION }}" rel="stylesheet" media="(prefers-color-scheme: dark)">
+	<link href="{{ QI_ROOT_PATH }}style/assets/css/qi_style.css?v={{ QI_VERSION }}" rel="stylesheet" media="screen">
+	<title>{{ PAGE_TITLE }} &bull; {{ lang('PHPBB_QI_TITLE') }}</title>
+</head>
+
+<body class="{{ S_CONTENT_DIRECTION }} position-relative{% if S_SETTINGS or S_BOARDS %} bg-secondary{% endif %}"{% if not S_BOARDS %} data-bs-spy="scroll" data-bs-target="#sidebar"{% endif %}>
+
+{% if U_VERSION_CHECK_URL %}
+<div class="toast-container position-fixed top-0 end-0 p-3 mt-5" style="z-index: 1045">
+	<div id="qiUpdateToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+		<div class="toast-body d-flex align-items-center justify-content-between">
+			<span>{{ lang('UPDATE_AVAILABLE') }}</span>
+			<a href="{{ U_VERSION_CHECK_URL }}" class="btn btn-danger btn-sm ms-3" title="{{ VERSION_CHECK_TITLE }}">{{ lang('DOWNLOAD') }}</a>
+			<span class="vr mx-3"></span>
+			<button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+		</div>
+	</div>
+</div>
+{% endif %}
+
+<div id="back-top" class="container-fluid anchor">
+	<div class="row">
+		<div class="col-md-3 col-lg-2 {% if S_BOARDS %}collapse{% else %}d-none{% endif %} d-md-block position-fixed px-3 py-2 sidebar" id="sidebar" role="navigation">
+			{% if S_BOARDS %}
+				{% include 'sidebar_boards.twig' %}
+			{% elseif S_SETTINGS %}
+				{% include 'sidebar_settings.twig' %}
+			{% elseif S_DOCS %}
+				{% include 'sidebar_docs.twig' %}
+			{% elseif S_CLI %}
+				{% include 'sidebar_cli.twig' %}
+			{% elseif S_PHPINFO %}
+				{% include 'sidebar_phpinfo.twig' %}
+			{% endif %}
+		</div>
+		<div class="ms-sm-auto col-md-9 col-lg-10 px-4">
+			{% include 'navbar.twig' %}
+			<div id="main" class="px-2">
+				<noscript>
+					<div class="alert alert-danger text-center" role="alert">
+						{{ lang('JAVASCRIPT_DISABLED_ALERT') }}
+					</div>
+				</noscript>
